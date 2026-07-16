@@ -1,14 +1,11 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.16)
+project(FastLog VERSION 1.0 LANGUAGES CXX)
 
-project(FastLog LANGUAGES CXX)
-
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(FastLog SHARED
-  FastLog_global.h
-  fastlog.cpp
-  fastlog.h
-)
-
-target_compile_definitions(FastLog PRIVATE FASTLOG_LIBRARY)
+# Add subdirectories
+# The library must be added before the test if the test depends on it
+add_subdirectory(src)
+add_subdirectory(test)   
