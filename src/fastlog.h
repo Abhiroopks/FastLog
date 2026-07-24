@@ -2,40 +2,63 @@
 #define FASTLOG_H
 
 #include "FastLog_global.h"
+#include <condition_variable>
 #include <fstream>
-#include <memory>
+#include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
+
+#define LOG_INFO(MSG) FastLog::getInstance().logMsg("INFO", MSG, __FILE__, __LINE__)
+#define LOG_DEBUG(MSG) FastLog::getInstance().logMsg("DEBUG", MSG, __FILE__, __LINE__)
+#define LOG_WARNING(MSG) FastLog::getInstance().logMsg("WARNING", MSG, __FILE__, __LINE__)
+#define LOG_CRITICAL(MSG) FastLog::getInstance().logMsg("CRITICAL", MSG, __FILE__, __LINE__)
+#define LOG_FATAL(MSG) FastLog::getInstance().logMsg("FATAL", MSG, __FILE__, __LINE__)
+
+// Struct to encapsulate all info for a single log message.
+struct LogMsg
+{
+    std::string level;
+    std::string msg;
+    std::string source;
+    int line;
+
+    LogMsg() = default;
+    LogMsg(const std::string level, const std::string msg, const std::string source, const int line);
+};
 
 class FASTLOG_EXPORT FastLog
 {
 public:
     // Retrieves the singleton object.
-    static FastLog &getInstance(std::string fileName, bool stdOut);
+    static FastLog &getInstance();
+    static void initialize(std::string fileName, bool stdOut);
 
     // used to log messages to stdout / file
-    void logInfo(const std::string &msg);
-    void logDebug(const std::string &msg);
-    void logError(const std::string &msg);
-    void logCritical(const std::string &msg);
-    void logFatal(const std::string &msg);
+    void logMsg(const std::string &level,
+                const std::string &msg,
+                const std::string &source,
+                const int line);
 
 private:
-    static FastLog *instance;
 
     // make constructor private to enforce singleton pattern.
-    FastLog(std::string fileName, bool stdOut);
+    FastLog();
     ~FastLog();
     void writeLoop();
 
     std::thread writer;
-    std::queue<std::string> messages;
+    std::mutex mtx;
+    bool finished;
+    std::condition_variable cv;
+    std::queue<LogMsg> messages;
     std::ofstream *outputFile;
 
     const std::string getTimestamp();
 
-    void logMsg(const std::string &level, const std::string &msg);
+    static bool initialized;
+    static std::string FILE_NAME;
+    static bool STD_OUT;
 };
 
 #endif // FASTLOG_H

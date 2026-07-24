@@ -3,70 +3,136 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
+#include <source_location>
 #include <sstream>
+
+// Constructor for LogMsg struct.
+LogMsg::LogMsg(const std::string level,
+               const std::string msg,
+               const std::string source,
+               const int line)
+    : level(level)
+    , msg(msg)
+    , source(source)
+    , line(line)
+{}
 
 /**
  * @brief FastLog::FastLog Private constructor
  * @param fileName the path to file where logs will be saved.
  * @param stdOut whether or not messages should be printed to stdout.
  */
-FastLog::FastLog(std::string fileName, bool stdOut)
+FastLog::FastLog()
+    : finished(false)
 {
-    outputFile = new std::ofstream(fileName, std::ofstream::out);
+    outputFile = new std::ofstream(FILE_NAME, std::ofstream::out);
     if (!outputFile->is_open()) {
-        std::cout << "Failed to open log file for writing";
+        std::cout << "Failed to open log file for writing in constructor" << std::endl;
+        return;
     }
+
+    writer = std::thread([this] { this->writeLoop(); });
 }
 
 FastLog::~FastLog()
 {
+    finished = true;
+    cv.notify_all();
+    if (writer.joinable()) {
+        writer.join();
+    }
+
     outputFile->close();
     delete outputFile;
+
 }
 
 /**
  * @brief FastLog::getInstance Returns the singleton instance.
- * @param fileName the path to file where logs will be saved.
- * @param stdOut whether or not messages should be printed to stdout.
  * @return singleton instance of FastLog.
  */
-FastLog &FastLog::getInstance(std::string fileName, bool stdOut)
+FastLog &FastLog::getInstance()
 {
-    if (instance == nullptr) {
-        instance = new FastLog(fileName, stdOut);
+    if (!initialized) {
+        throw std::runtime_error("FastLog not initialized yet");
     }
 
-    return *instance;
+    // Created on first call.
+    static FastLog instance;
+    return instance;
 }
 
-void FastLog::logMsg(const std::string &level, const std::string &msg)
+/**
+ * @brief FastLog::initialize initializes the file name and stdout param.
+ * @param fileName the path to file where logs will be saved.
+ * @param stdOut whether or not messages should be printed to stdout.
+ */
+void FastLog::initialize(std::string fileName, bool stdOut)
 {
-    *outputFile << getTimestamp() << " | " << level << " | " << msg;
+    if (initialized) {
+        std::cout << "already initialized FastLog" << std::endl;
+        return;
+    }
+
+    FILE_NAME = fileName;
+    STD_OUT = stdOut;
+
+    initialized = true;
 }
 
 // used to log messages to stdout / file
-void FastLog::logInfo(const std::string &msg)
+void FastLog::logMsg(const std::string &level,
+                     const std::string &msg,
+                     const std::string &source,
+                     const int line)
 {
-    logMsg("INFO", msg);
-}
-void FastLog::logDebug(const std::string &msg)
-{
-    logMsg("DEBUG", msg);
-}
-void FastLog::logError(const std::string &msg)
-{
-    logMsg("ERROR", msg);
-}
-void FastLog::logCritical(const std::string &msg)
-{
-    logMsg("CRITICAL", msg);
-}
-void FastLog::logFatal(const std::string &msg)
-{
-    logMsg("FATAL", msg);
+    if (finished) {
+        std::cout << "Attempting to log a message after logger deleted.";
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        messages.push(LogMsg(level, msg, source, line));
+    }
+
+    cv.notify_one();
 }
 
-void FastLog::writeLoop() {}
+void FastLog::writeLoop()
+{
+    LogMsg logMsg;
+
+    while (true) {
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+            // Wait until there is data or a finish signal
+            cv.wait(lock, [&]() { return !messages.empty() || finished; });
+
+            if (finished && messages.empty())
+                break;
+
+            if (!messages.empty()) {
+                logMsg = messages.front();
+                messages.pop();
+            }
+        }
+
+        // Process msg
+        if (STD_OUT) {
+            std::cout << logMsg.msg << std::endl;
+        }
+
+        if (!outputFile->is_open()) {
+            std::cout << "Failed to open log file for writing" << std::endl;
+            return;
+        }
+
+        *outputFile << getTimestamp() << " | " << logMsg.level << " | " << logMsg.source << ":"
+                    << logMsg.line << " | " << logMsg.msg << std::endl;
+    }
+}
 
 const std::string FastLog::getTimestamp()
 {
@@ -78,4 +144,6 @@ const std::string FastLog::getTimestamp()
     return oss.str();
 }
 
-FastLog *FastLog::instance = nullptr;
+std::string FastLog::FILE_NAME = "";
+bool FastLog::STD_OUT = false;
+bool FastLog::initialized = false;
