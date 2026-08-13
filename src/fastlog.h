@@ -53,6 +53,7 @@ private:
     std::condition_variable cv;
     std::queue<LogMsg> messages;
     std::ofstream *outputFile;
+    int logCount;
 
     const std::string getTimestamp();
 

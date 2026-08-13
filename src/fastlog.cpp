@@ -7,6 +7,11 @@
 #include <source_location>
 #include <sstream>
 
+#include <nlohmann/json.hpp>
+
+// for convenience
+using json = nlohmann::json;
+
 // Constructor for LogMsg struct.
 LogMsg::LogMsg(const std::string level,
                const std::string msg,
@@ -25,12 +30,15 @@ LogMsg::LogMsg(const std::string level,
  */
 FastLog::FastLog()
     : finished(false)
+    , logCount(0)
 {
     outputFile = new std::ofstream(FILE_NAME, std::ofstream::out);
     if (!outputFile->is_open()) {
         std::cout << "Failed to open log file for writing in constructor" << std::endl;
         return;
     }
+
+    *outputFile << "[";
 
     writer = std::thread([this] { this->writeLoop(); });
 }
@@ -43,6 +51,7 @@ FastLog::~FastLog()
         writer.join();
     }
 
+    *outputFile << std::endl << "]" << std::endl;
     outputFile->close();
     delete outputFile;
 
@@ -129,8 +138,23 @@ void FastLog::writeLoop()
             return;
         }
 
-        *outputFile << getTimestamp() << " | " << logMsg.level << " | " << logMsg.source << ":"
-                    << logMsg.line << " | " << logMsg.msg << std::endl;
+        // *outputFile << getTimestamp() << " | " << logMsg.level << " | " << logMsg.source << ":"
+        //             << logMsg.line << " | " << logMsg.msg << std::endl;
+
+        json j;
+        j["timestamp"] = getTimestamp();
+        j["level"] = logMsg.level;
+        j["source"] = logMsg.source;
+        j["line"] = logMsg.line;
+        j["msg"] = logMsg.msg;
+
+        if (logCount > 0) {
+            *outputFile << ',';
+        }
+
+        *outputFile << std::endl << j.dump(4);
+
+        logCount++;
     }
 }
 
