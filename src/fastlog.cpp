@@ -16,10 +16,12 @@ using json = nlohmann::json;
 LogMsg::LogMsg(const std::string level,
                const std::string msg,
                const std::string source,
+               const std::string timestamp,
                const int line)
     : level(level)
     , msg(msg)
     , source(source)
+    , timestamp(timestamp)
     , line(line)
 {}
 
@@ -103,7 +105,7 @@ void FastLog::logMsg(const std::string &level,
 
     {
         std::lock_guard<std::mutex> lock(mtx);
-        messages.push(LogMsg(level, msg, source, line));
+        messages.push(LogMsg(level, msg, source, FastLog::getTimestamp(), line));
     }
 
     cv.notify_one();
@@ -111,26 +113,23 @@ void FastLog::logMsg(const std::string &level,
 
 void FastLog::writeLoop()
 {
-    LogMsg logMsg;
+    LogMsg *logMsg;
 
     while (true) {
-        {
-            std::unique_lock<std::mutex> lock(mtx);
-            // Wait until there is data or a finish signal
-            cv.wait(lock, [&]() { return !messages.empty() || finished; });
+        std::unique_lock<std::mutex> lock(mtx);
+        // Wait until there is data or a finish signal
+        cv.wait(lock, [&]() { return !messages.empty() || finished; });
 
-            if (finished && messages.empty())
-                break;
+        if (finished && messages.empty())
+            break;
 
-            if (!messages.empty()) {
-                logMsg = messages.front();
-                messages.pop();
-            }
+        if (!messages.empty()) {
+            logMsg = &messages.front();
         }
 
         // Process msg
         if (STD_OUT) {
-            std::cout << logMsg.msg << std::endl;
+            std::cout << logMsg->msg << std::endl;
         }
 
         if (!outputFile->is_open()) {
@@ -138,15 +137,12 @@ void FastLog::writeLoop()
             return;
         }
 
-        // *outputFile << getTimestamp() << " | " << logMsg.level << " | " << logMsg.source << ":"
-        //             << logMsg.line << " | " << logMsg.msg << std::endl;
-
         json j;
         j["timestamp"] = getTimestamp();
-        j["level"] = logMsg.level;
-        j["source"] = logMsg.source;
-        j["line"] = logMsg.line;
-        j["msg"] = logMsg.msg;
+        j["level"] = logMsg->level;
+        j["source"] = logMsg->source;
+        j["line"] = logMsg->line;
+        j["msg"] = logMsg->msg;
 
         if (logCount > 0) {
             *outputFile << ',';
@@ -155,6 +151,8 @@ void FastLog::writeLoop()
         *outputFile << std::endl << j.dump(4);
 
         logCount++;
+
+        messages.pop();
     }
 }
 
@@ -164,7 +162,7 @@ const std::string FastLog::getTimestamp()
     std::tm *tm_info = std::localtime(&now);
     std::ostringstream oss;
     // Format: DD-MM-YYYY HH-MM-SS
-    oss << std::put_time(tm_info, "%d-%m-%Y %H-%M-%S");
+    oss << std::put_time(tm_info, "%d-%m-%Y %H:%M:%S");
     return oss.str();
 }
 
