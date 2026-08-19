@@ -21,10 +21,15 @@ struct LogMsg
     std::string level;
     std::string msg;
     std::string source;
+    std::string timestamp;
     int line;
 
-    LogMsg() = default;
-    LogMsg(const std::string level, const std::string msg, const std::string source, const int line);
+    LogMsg() = delete;
+    LogMsg(const std::string level,
+           const std::string msg,
+           const std::string source,
+           const std::string timestamp,
+           const int line);
 };
 
 class FASTLOG_EXPORT FastLog
