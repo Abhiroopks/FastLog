@@ -9,3 +9,5 @@ target_link_libraries(FastLogTest PRIVATE
     FastLogLib
 )
 
+add_test(NAME FastLogTest COMMAND FastLogTest)
+
