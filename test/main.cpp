@@ -4,23 +4,42 @@
 #include <thread>
 
 const std::string FILE_NAME = "log.log";
-const bool STD_OUT = true;
+const bool STD_OUT = false;
 
-void testLogMsg(const std::string msg)
+void testLogMsg(const int id)
 {
-    LOG_INFO(msg);
+    LOG_INFO("msg " + std::to_string(id));
 }
 
 int main()
 {
     FastLog::initialize(FILE_NAME, STD_OUT);
-
     std::vector<std::thread> threads;
-    threads.push_back(std::thread([] { testLogMsg("hi"); }));
-    threads.push_back(std::thread([] { testLogMsg("work1"); }));
-    threads.push_back(std::thread([] { testLogMsg("work2"); }));
-    threads.push_back(std::thread([] { testLogMsg("work3"); }));
-    threads.push_back(std::thread([] { testLogMsg("bye"); }));
+    unsigned int tasks = 100000;
+    unsigned int cores = std::thread::hardware_concurrency();
+    unsigned int blocks = cores - 1;
+
+    std::cout << "Running " << tasks << " tasks in groups of " << cores - 1 << std::endl;
+
+    for (auto i = 0; i < tasks / blocks; i++) {
+        for (auto j = 0; j < blocks; j++) {
+            auto thread_id = i * blocks + j;
+            threads.push_back(std::thread([thread_id] { testLogMsg(thread_id); }));
+        }
+
+        for (auto &t : threads) {
+            t.join();
+        }
+
+        threads.clear();
+    }
+
+    // do remainder tasks
+    auto remaining = tasks % blocks;
+
+    for (auto i = tasks - remaining; i < tasks; i++) {
+        threads.push_back(std::thread([i] { testLogMsg(i); }));
+    }
 
     for (auto &t : threads) {
         t.join();
