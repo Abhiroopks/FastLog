@@ -113,23 +113,27 @@ void FastLog::logMsg(const std::string &level,
 
 void FastLog::writeLoop()
 {
-    LogMsg *logMsg;
+    LogMsg logMsg;
 
     while (true) {
-        std::unique_lock<std::mutex> lock(mtx);
-        // Wait until there is data or a finish signal
-        cv.wait(lock, [&]() { return !messages.empty() || finished; });
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+            // Wait until there is data or a finish signal
+            cv.wait(lock, [&]() { return !messages.empty() || finished; });
 
-        if (finished && messages.empty())
+            if (!messages.empty()) {
+                logMsg = messages.front();
+                messages.pop();
+            }
+        }
+
+        if (finished && messages.empty()) {
             break;
-
-        if (!messages.empty()) {
-            logMsg = &messages.front();
         }
 
         // Process msg
         if (STD_OUT) {
-            std::cout << logMsg->msg << std::endl;
+            std::cout << logMsg.msg << std::endl;
         }
 
         if (!outputFile->is_open()) {
@@ -138,11 +142,11 @@ void FastLog::writeLoop()
         }
 
         json j;
-        j["timestamp"] = getTimestamp();
-        j["level"] = logMsg->level;
-        j["source"] = logMsg->source;
-        j["line"] = logMsg->line;
-        j["msg"] = logMsg->msg;
+        j["timestamp"] = logMsg.timestamp;
+        j["level"] = logMsg.level;
+        j["source"] = logMsg.source;
+        j["line"] = logMsg.line;
+        j["msg"] = logMsg.msg;
 
         if (logCount > 0) {
             *outputFile << ',';
@@ -151,8 +155,6 @@ void FastLog::writeLoop()
         *outputFile << std::endl << j.dump(4);
 
         logCount++;
-
-        messages.pop();
     }
 }
 

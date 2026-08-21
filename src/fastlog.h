@@ -24,7 +24,7 @@ struct LogMsg
     std::string timestamp;
     int line;
 
-    LogMsg() = delete;
+    LogMsg() = default;
     LogMsg(const std::string level,
            const std::string msg,
            const std::string source,
