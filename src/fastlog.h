@@ -2,6 +2,7 @@
 #define FASTLOG_H
 
 #include "FastLog_global.h"
+#include <atomic>
 #include <condition_variable>
 #include <fstream>
 #include <mutex>
@@ -45,6 +46,8 @@ public:
                 const std::string &source,
                 const int line);
 
+    int getLogCount();
+
 private:
 
     // make constructor private to enforce singleton pattern.
@@ -54,11 +57,11 @@ private:
 
     std::thread writer;
     std::mutex mtx;
-    bool finished;
+    std::atomic<bool> finished;
     std::condition_variable cv;
     std::queue<LogMsg> messages;
     std::ofstream *outputFile;
-    int logCount;
+    std::atomic<int> logCount;
 
     const std::string getTimestamp();
 

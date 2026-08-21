@@ -257,6 +257,94 @@ void test_performance_throughput()
     TEST_ASSERT(throughput >= 1000.0, "Throughput threshold failed: throughput was below 1,000 msgs/sec");
 }
 
+// Helper to wait until FastLog writes a specific target number of logs to file
+bool wait_for_written_log_count(int targetCount, double timeoutSeconds = 15.0)
+{
+    auto startWait = std::chrono::high_resolution_clock::now();
+    while (FastLog::getInstance().getLogCount() < targetCount) {
+        auto now = std::chrono::high_resolution_clock::now();
+        double elapsed = std::chrono::duration<double>(now - startWait).count();
+        if (elapsed > timeoutSeconds) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    return true;
+}
+
+// Test 9: Performance test validating disk/file write throughput and drain latency using getLogCount()
+void test_file_write_throughput()
+{
+    // First ensure any pending log messages from prior tests have been completely written to file
+    // by waiting for the log count to stabilize.
+    int stableCount = FastLog::getInstance().getLogCount();
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        int current = FastLog::getInstance().getLogCount();
+        if (current == stableCount) {
+            break;
+        }
+        stableCount = current;
+    }
+
+    const int testLogs = 5000;
+    const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
+    const int logsPerThread = testLogs / numThreads;
+    const int totalLogsToEmit = logsPerThread * numThreads;
+    const int startLogCount = FastLog::getInstance().getLogCount();
+    const int expectedFinalCount = startLogCount + totalLogsToEmit;
+
+    std::vector<std::thread> threads;
+    std::atomic<bool> startFlag{false};
+
+    threads.reserve(numThreads);
+    for (unsigned int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([t, logsPerThread, &startFlag]() {
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+            for (int i = 0; i < logsPerThread; ++i) {
+                LOG_INFO("File write perf thread " + std::to_string(t) + " msg #" + std::to_string(i));
+            }
+        });
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+    startFlag.store(true);
+
+    for (auto &t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    // Wait until background writer thread has formatted and written all messages to the file
+    bool completed = wait_for_written_log_count(expectedFinalCount, 15.0);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    TEST_ASSERT(completed, "Timed out waiting for FastLog background writer to flush all logs to disk");
+
+    int finalLogCount = FastLog::getInstance().getLogCount();
+    int actualLogsWritten = finalLogCount - startLogCount;
+    TEST_ASSERT(actualLogsWritten == totalLogsToEmit,
+                "Log count mismatch: expected " + std::to_string(totalLogsToEmit) + " logs written, but got " + std::to_string(actualLogsWritten));
+
+    double elapsedSeconds = std::chrono::duration<double>(end - start).count();
+    double writeThroughput = static_cast<double>(actualLogsWritten) / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
+    double avgLatencyMicros = (elapsedSeconds * 1e6) / static_cast<double>(actualLogsWritten);
+
+    std::cout << "\n      -> Wrote " << actualLogsWritten << " logs to file in "
+              << std::fixed << std::setprecision(4) << elapsedSeconds << " s "
+              << "(" << std::fixed << std::setprecision(0) << writeThroughput << " logs/sec, "
+              << std::fixed << std::setprecision(2) << avgLatencyMicros << " us/log avg write latency) ... ";
+
+    // Performance assertions against baseline:
+    // Baseline: Disk write throughput must exceed 500 logs/second (or under 2000 us/log)
+    TEST_ASSERT(writeThroughput >= 500.0, "File write throughput was below baseline of 500 logs/sec");
+    // Maximum allowable time: all 5000 logs written in under 10 seconds
+    TEST_ASSERT(elapsedSeconds < 10.0, "File writing took longer than the 10.0 second threshold");
+}
+
 // Test runner infrastructure
 struct TestResult
 {
@@ -379,6 +467,7 @@ int main()
     suite.addTest("TestConcurrentMultiThreadedLogging", test_concurrent_multithreaded_logging);
     suite.addTest("TestHighVolumeBurstLogging", test_high_volume_burst_logging);
     suite.addTest("TestPerformanceThroughput", test_performance_throughput);
+    suite.addTest("TestFileWritePerformanceThroughput", test_file_write_throughput);
 
     return suite.runAll();
 }

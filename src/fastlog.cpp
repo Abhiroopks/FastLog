@@ -47,7 +47,7 @@ FastLog::FastLog()
 
 FastLog::~FastLog()
 {
-    finished = true;
+    finished.store(true);
     cv.notify_all();
     if (writer.joinable()) {
         writer.join();
@@ -98,7 +98,7 @@ void FastLog::logMsg(const std::string &level,
                      const std::string &source,
                      const int line)
 {
-    if (finished) {
+    if (finished.load()) {
         std::cout << "Attempting to log a message after logger deleted.";
         return;
     }
@@ -119,7 +119,7 @@ void FastLog::writeLoop()
         {
             std::unique_lock<std::mutex> lock(mtx);
             // Wait until there is data or a finish signal
-            cv.wait(lock, [&]() { return !messages.empty() || finished; });
+            cv.wait(lock, [&]() { return !messages.empty() || finished.load(); });
 
             if (!messages.empty()) {
                 logMsg = messages.front();
@@ -127,7 +127,7 @@ void FastLog::writeLoop()
             }
         }
 
-        if (finished && messages.empty()) {
+        if (finished.load() && messages.empty()) {
             break;
         }
 
@@ -148,13 +148,13 @@ void FastLog::writeLoop()
         j["line"] = logMsg.line;
         j["msg"] = logMsg.msg;
 
-        if (logCount > 0) {
+        if (logCount.load() > 0) {
             *outputFile << ',';
         }
 
         *outputFile << std::endl << j.dump(4);
 
-        logCount++;
+        logCount.fetch_add(1);
     }
 }
 
@@ -166,6 +166,11 @@ const std::string FastLog::getTimestamp()
     // Format: DD-MM-YYYY HH-MM-SS
     oss << std::put_time(tm_info, "%d-%m-%Y %H:%M:%S");
     return oss.str();
+}
+
+int FastLog::getLogCount()
+{
+    return logCount.load();
 }
 
 std::string FastLog::FILE_NAME = "";
