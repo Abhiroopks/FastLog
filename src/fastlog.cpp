@@ -40,7 +40,7 @@ FastLog::FastLog()
         return;
     }
 
-    *outputFile << "[";
+    //*outputFile << "[";
 
     writer = std::thread([this] { this->writeLoop(); });
 }
@@ -53,7 +53,7 @@ FastLog::~FastLog()
         writer.join();
     }
 
-    *outputFile << std::endl << "]" << std::endl;
+    //*outputFile << std::endl << "]" << std::endl;
     outputFile->close();
     delete outputFile;
 
@@ -148,11 +148,11 @@ void FastLog::writeLoop()
         j["line"] = logMsg.line;
         j["msg"] = logMsg.msg;
 
-        if (logCount.load() > 0) {
-            *outputFile << ',';
-        }
+        // if (logCount.load() > 0) {
+        //     *outputFile << ',';
+        // }
 
-        *outputFile << std::endl << j.dump(4);
+        *outputFile << j.dump() << std::endl;
 
         logCount.fetch_add(1);
     }
