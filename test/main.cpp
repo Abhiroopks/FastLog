@@ -119,6 +119,8 @@ void test_all_severity_macros()
     // Direct invocation via FastLog::logMsg
     TEST_ASSERT_NO_THROW(FastLog::getInstance().logMsg("CUSTOM", "Direct API invocation message", "custom.cpp", 100),
                          "Direct logMsg method call should not throw");
+
+    FastLog::getInstance().flush();
 }
 
 // Test 5: Validate handling of special characters, JSON formatting characters, and large payloads
@@ -139,6 +141,8 @@ void test_special_characters_and_payloads()
 
     // Empty message string
     TEST_ASSERT_NO_THROW(LOG_INFO(""), "Empty log message should log cleanly");
+
+    FastLog::getInstance().flush();
 }
 
 // Test 6: Validate concurrent multi-threaded logging safety across multiple worker threads
@@ -178,6 +182,8 @@ void test_concurrent_multithreaded_logging()
 
     TEST_ASSERT(completedThreads.load() == static_cast<int>(numThreads),
                 "All worker threads must finish logging successfully without hanging or deadlocking");
+
+    FastLog::getInstance().flush();
 }
 
 // Test 7: Validate queue stability under high volume bursts
@@ -207,6 +213,8 @@ void test_high_volume_burst_logging()
     for (int i = 0; i < remainder; ++i) {
         LOG_INFO("Burst logging remainder item " + std::to_string(i));
     }
+
+    FastLog::getInstance().flush();
 }
 
 // Test 8: Performance test validating logging throughput and enqueue latency
@@ -241,20 +249,22 @@ void test_performance_throughput()
     auto end = std::chrono::high_resolution_clock::now();
 
     double elapsedSeconds = std::chrono::duration<double>(end - start).count();
-    int actualLogs = logsPerThread * numThreads;
-    double throughput = static_cast<double>(actualLogs) / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
-    double avgLatencyMicros = (elapsedSeconds * 1e6) / static_cast<double>(actualLogs);
+    double throughput = static_cast<double>(benchmarkLogs)
+                        / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
+    double avgLatencyMicros = (elapsedSeconds * 1e6) / static_cast<double>(benchmarkLogs);
 
-    std::cout << "\n      -> Enqueued " << actualLogs << " logs in "
-              << std::fixed << std::setprecision(4) << elapsedSeconds << " s "
-              << "(" << std::fixed << std::setprecision(0) << throughput << " msgs/sec, "
-              << std::fixed << std::setprecision(2) << avgLatencyMicros << " us/msg avg latency) ... ";
+    std::cout << "\n      -> Enqueued " << benchmarkLogs << " logs in " << std::fixed
+              << std::setprecision(4) << elapsedSeconds << " s " << "(" << std::fixed
+              << std::setprecision(0) << throughput << " msgs/sec, " << std::fixed
+              << std::setprecision(2) << avgLatencyMicros << " us/msg avg latency) ... ";
 
     // Performance validations:
     // 1. All 20,000 logs must be enqueued across threads in under 5.0 seconds
     TEST_ASSERT(elapsedSeconds < 5.0, "Performance threshold failed: benchmark took 5.0 seconds or more");
     // 2. Minimum throughput should exceed 1,000 messages/second
     TEST_ASSERT(throughput >= 1000.0, "Throughput threshold failed: throughput was below 1,000 msgs/sec");
+
+    FastLog::getInstance().flush();
 }
 
 // Helper to wait until FastLog writes a specific target number of logs to file
@@ -287,12 +297,11 @@ void test_file_write_throughput()
         stableCount = current;
     }
 
-    const int testLogs = 5000;
+    const int testLogs = 20000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
     const int logsPerThread = testLogs / numThreads;
-    const int totalLogsToEmit = logsPerThread * numThreads;
     const int startLogCount = FastLog::getInstance().getLogCount();
-    const int expectedFinalCount = startLogCount + totalLogsToEmit;
+    const int expectedFinalCount = startLogCount + testLogs;
 
     std::vector<std::thread> threads;
     std::atomic<bool> startFlag{false};
@@ -318,6 +327,9 @@ void test_file_write_throughput()
         }
     }
 
+    // flush the logger.
+    FastLog::getInstance().flush();
+
     // Wait until background writer thread has formatted and written all messages to the file
     bool completed = wait_for_written_log_count(expectedFinalCount, 15.0);
     auto end = std::chrono::high_resolution_clock::now();
@@ -326,8 +338,9 @@ void test_file_write_throughput()
 
     int finalLogCount = FastLog::getInstance().getLogCount();
     int actualLogsWritten = finalLogCount - startLogCount;
-    TEST_ASSERT(actualLogsWritten == totalLogsToEmit,
-                "Log count mismatch: expected " + std::to_string(totalLogsToEmit) + " logs written, but got " + std::to_string(actualLogsWritten));
+    TEST_ASSERT(actualLogsWritten == testLogs,
+                "Log count mismatch: expected " + std::to_string(testLogs)
+                    + " logs written, but got " + std::to_string(actualLogsWritten));
 
     double elapsedSeconds = std::chrono::duration<double>(end - start).count();
     double writeThroughput = static_cast<double>(actualLogsWritten) / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);

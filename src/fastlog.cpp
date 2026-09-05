@@ -40,9 +40,9 @@ FastLog::FastLog()
         return;
     }
 
-    //*outputFile << "[";
-
     writer = std::thread([this] { this->writeLoop(); });
+
+    writeBuffer.reserve(BUFFER_SIZE);
 }
 
 FastLog::~FastLog()
@@ -53,7 +53,10 @@ FastLog::~FastLog()
         writer.join();
     }
 
-    //*outputFile << std::endl << "]" << std::endl;
+    if (writeBuffer.size() > 0) {
+        flushBuffer();
+    }
+
     outputFile->close();
     delete outputFile;
 
@@ -78,8 +81,9 @@ FastLog &FastLog::getInstance()
  * @brief FastLog::initialize initializes the file name and stdout param.
  * @param fileName the path to file where logs will be saved.
  * @param stdOut whether or not messages should be printed to stdout.
+ * @param bufferSize the size, in bytes, of the writeBuffer. Defaults to 16 KB.
  */
-void FastLog::initialize(std::string fileName, bool stdOut)
+void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferSize)
 {
     if (initialized) {
         std::cout << "already initialized FastLog" << std::endl;
@@ -88,6 +92,7 @@ void FastLog::initialize(std::string fileName, bool stdOut)
 
     FILE_NAME = fileName;
     STD_OUT = stdOut;
+    BUFFER_SIZE = bufferSize;
 
     initialized = true;
 }
@@ -121,24 +126,23 @@ void FastLog::writeLoop()
             // Wait until there is data or a finish signal
             cv.wait(lock, [&]() { return !messages.empty() || finished.load(); });
 
-            if (!messages.empty()) {
-                logMsg = messages.front();
-                messages.pop();
+            if (finished.load() && messages.empty()) {
+                break;
             }
+
+            logMsg = std::move(messages.front());
+            messages.pop();
         }
 
-        if (finished.load() && messages.empty()) {
-            break;
+        // Check if this a special flush request
+        if (logMsg.line == -1) {
+            flushBuffer();
+            continue;
         }
 
         // Process msg
         if (STD_OUT) {
             std::cout << logMsg.msg << std::endl;
-        }
-
-        if (!outputFile->is_open()) {
-            std::cout << "Failed to open log file for writing" << std::endl;
-            return;
         }
 
         json j;
@@ -148,13 +152,12 @@ void FastLog::writeLoop()
         j["line"] = logMsg.line;
         j["msg"] = logMsg.msg;
 
-        // if (logCount.load() > 0) {
-        //     *outputFile << ',';
-        // }
+        writeBuffer.append(j.dump() + '\n');
+        bufferMsgCount++;
 
-        *outputFile << j.dump() << std::endl;
-
-        logCount.fetch_add(1);
+        if (writeBuffer.size() >= BUFFER_SIZE) {
+            flushBuffer();
+        }
     }
 }
 
@@ -168,6 +171,24 @@ const std::string FastLog::getTimestamp()
     return oss.str();
 }
 
+void FastLog::flushBuffer()
+{
+    if (!outputFile->is_open()) {
+        std::cout << "Failed to open log file for writing" << std::endl;
+        return;
+    }
+    *outputFile << writeBuffer;
+    logCount.fetch_add(bufferMsgCount);
+    bufferMsgCount = 0;
+    writeBuffer.clear();
+}
+
+void FastLog::flush()
+{
+    // use a special LogMsg to force a flush to disk.
+    logMsg("", "", "", -1);
+}
+
 int FastLog::getLogCount()
 {
     return logCount.load();
@@ -176,3 +197,4 @@ int FastLog::getLogCount()
 std::string FastLog::FILE_NAME = "";
 bool FastLog::STD_OUT = false;
 bool FastLog::initialized = false;
+unsigned int FastLog::BUFFER_SIZE = 0;

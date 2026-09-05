@@ -16,6 +16,8 @@
 #define LOG_CRITICAL(MSG) FastLog::getInstance().logMsg("CRITICAL", MSG, __FILE__, __LINE__)
 #define LOG_FATAL(MSG) FastLog::getInstance().logMsg("FATAL", MSG, __FILE__, __LINE__)
 
+const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
+
 // Struct to encapsulate all info for a single log message.
 struct LogMsg
 {
@@ -38,7 +40,9 @@ class FASTLOG_EXPORT FastLog
 public:
     // Retrieves the singleton object.
     static FastLog &getInstance();
-    static void initialize(std::string fileName, bool stdOut);
+    static void initialize(std::string fileName,
+                           bool stdOut,
+                           unsigned int bufferSize = DEFAULT_BUFFER_SIZE);
 
     // used to log messages to stdout / file
     void logMsg(const std::string &level,
@@ -48,12 +52,16 @@ public:
 
     int getLogCount();
 
+    void flush();
+
 private:
 
     // make constructor private to enforce singleton pattern.
     FastLog();
     ~FastLog();
     void writeLoop();
+    const std::string getTimestamp();
+    void flushBuffer();
 
     std::thread writer;
     std::mutex mtx;
@@ -62,12 +70,13 @@ private:
     std::queue<LogMsg> messages;
     std::ofstream *outputFile;
     std::atomic<int> logCount;
-
-    const std::string getTimestamp();
+    unsigned int bufferMsgCount;
+    std::string writeBuffer;
 
     static bool initialized;
     static std::string FILE_NAME;
     static bool STD_OUT;
+    static unsigned int BUFFER_SIZE;
 };
 
 #endif // FASTLOG_H
