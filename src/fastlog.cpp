@@ -137,7 +137,14 @@ void FastLog::writeLoop()
         // Check if this a special flush request
         if (logMsg.line == -1) {
             flushBuffer();
+
+            // no need to process this msg, as it's just
+            // a flush request.
             continue;
+        }
+
+        if (writeBuffer.size() >= BUFFER_SIZE) {
+            flushBuffer();
         }
 
         // Process msg
@@ -155,9 +162,6 @@ void FastLog::writeLoop()
         writeBuffer.append(j.dump() + '\n');
         bufferMsgCount++;
 
-        if (writeBuffer.size() >= BUFFER_SIZE) {
-            flushBuffer();
-        }
     }
 }
 
