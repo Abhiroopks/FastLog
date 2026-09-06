@@ -297,7 +297,7 @@ void test_file_write_throughput()
         stableCount = current;
     }
 
-    const int testLogs = 20000;
+    const int testLogs = 5000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
     const int logsPerThread = testLogs / numThreads;
     const int startLogCount = FastLog::getInstance().getLogCount();

@@ -7,11 +7,6 @@
 #include <source_location>
 #include <sstream>
 
-#include <nlohmann/json.hpp>
-
-// for convenience
-using json = nlohmann::json;
-
 // Constructor for LogMsg struct.
 LogMsg::LogMsg(const std::string level,
                const std::string msg,
@@ -152,14 +147,12 @@ void FastLog::writeLoop()
             std::cout << logMsg.msg << std::endl;
         }
 
-        json j;
-        j["timestamp"] = logMsg.timestamp;
-        j["level"] = logMsg.level;
-        j["source"] = logMsg.source;
-        j["line"] = logMsg.line;
-        j["msg"] = logMsg.msg;
+        std::ostringstream oss;
+        oss << "{\"timestamp\":\"" << logMsg.timestamp << "\",\"level\":\"" << logMsg.level
+            << "\",\"source\":\"" << logMsg.source << "\",\"line\":" << logMsg.line << ",\"msg\":\""
+            << logMsg.msg << "\"}\n";
+        writeBuffer.append(oss.str());
 
-        writeBuffer.append(j.dump() + '\n');
         bufferMsgCount++;
 
     }

@@ -17,6 +17,8 @@
 #define LOG_FATAL(MSG) FastLog::getInstance().logMsg("FATAL", MSG, __FILE__, __LINE__)
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
+// inline constexpr std::string_view LOG_JSON_FMT
+//     = "{{\"timestamp\":{},\"level\":{},\"source\":{},\"line\":{},\"msg\":{}}}\n";
 
 // Struct to encapsulate all info for a single log message.
 struct LogMsg
