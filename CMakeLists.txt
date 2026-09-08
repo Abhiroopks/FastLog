@@ -5,6 +5,16 @@ project(FastLog VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+include(FetchContent)
+
+FetchContent_Declare(
+    concurrentqueue
+    GIT_REPOSITORY https://github.com/cameron314/concurrentqueue.git
+    GIT_TAG        v1.0.5
+)
+
+FetchContent_MakeAvailable(concurrentqueue)
+
 # Enable testing
 enable_testing()
 

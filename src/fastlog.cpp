@@ -3,8 +3,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <mutex>
-#include <source_location>
 #include <sstream>
 
 // Constructor for LogMsg struct.
@@ -43,13 +41,9 @@ FastLog::FastLog()
 FastLog::~FastLog()
 {
     finished.store(true);
-    cv.notify_all();
+
     if (writer.joinable()) {
         writer.join();
-    }
-
-    if (writeBuffer.size() > 0) {
-        flushBuffer();
     }
 
     outputFile->close();
@@ -103,12 +97,7 @@ void FastLog::logMsg(const std::string &level,
         return;
     }
 
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        messages.push(LogMsg(level, msg, source, FastLog::getTimestamp(), line));
-    }
-
-    cv.notify_one();
+    messages.enqueue(LogMsg(level, msg, source, FastLog::getTimestamp(), line));
 }
 
 void FastLog::writeLoop()
@@ -116,18 +105,11 @@ void FastLog::writeLoop()
     LogMsg logMsg;
 
     while (true) {
-        {
-            std::unique_lock<std::mutex> lock(mtx);
-            // Wait until there is data or a finish signal
-            cv.wait(lock, [&]() { return !messages.empty() || finished.load(); });
-
-            if (finished.load() && messages.empty()) {
-                break;
-            }
-
-            logMsg = std::move(messages.front());
-            messages.pop();
+        if (finished.load() && messages.size_approx() == 0) {
+            break;
         }
+
+        messages.wait_dequeue_timed(logMsg, std::chrono::milliseconds(100));
 
         // Check if this a special flush request
         if (logMsg.line == -1) {

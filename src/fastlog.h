@@ -3,10 +3,9 @@
 
 #include "FastLog_global.h"
 #include <atomic>
-#include <condition_variable>
+#include <blockingconcurrentqueue.h>
+#include <concurrentqueue.h>
 #include <fstream>
-#include <mutex>
-#include <queue>
 #include <string>
 #include <thread>
 
@@ -17,8 +16,6 @@
 #define LOG_FATAL(MSG) FastLog::getInstance().logMsg("FATAL", MSG, __FILE__, __LINE__)
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
-// inline constexpr std::string_view LOG_JSON_FMT
-//     = "{{\"timestamp\":{},\"level\":{},\"source\":{},\"line\":{},\"msg\":{}}}\n";
 
 // Struct to encapsulate all info for a single log message.
 struct LogMsg
@@ -66,10 +63,9 @@ private:
     void flushBuffer();
 
     std::thread writer;
-    std::mutex mtx;
     std::atomic<bool> finished;
-    std::condition_variable cv;
-    std::queue<LogMsg> messages;
+    // std::queue<LogMsg> messages;
+    moodycamel::BlockingConcurrentQueue<LogMsg> messages;
     std::ofstream *outputFile;
     std::atomic<int> logCount;
     unsigned int bufferMsgCount;
