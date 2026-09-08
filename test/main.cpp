@@ -91,16 +91,15 @@ void test_initialization_and_reinitialization()
 // Test 3: Validate LogMsg struct member initialization and field correctness
 void test_log_msg_structure()
 {
-    LogMsg msg1("INFO", "Test message content", "test_source.cpp", "20-08-2026 12:00:00", 42);
-    TEST_ASSERT(msg1.level == "INFO", "LogMsg level should match constructor argument");
+    LogMsg msg1(Severity::INFO, "Test message content", "test_source.cpp", "20-08-2026 12:00:00", 42);
+    TEST_ASSERT(msg1.level == Severity::INFO, "LogMsg level should match constructor argument");
     TEST_ASSERT(msg1.msg == "Test message content", "LogMsg msg should match constructor argument");
     TEST_ASSERT(msg1.source == "test_source.cpp", "LogMsg source should match constructor argument");
     TEST_ASSERT(msg1.timestamp == "20-08-2026 12:00:00", "LogMsg timestamp should match constructor argument");
     TEST_ASSERT(msg1.line == 42, "LogMsg line number should match constructor argument");
 
     // Edge case: Empty strings and zero line number
-    LogMsg msg2("", "", "", "", 0);
-    TEST_ASSERT(msg2.level.empty(), "LogMsg level should allow empty string");
+    LogMsg msg2(Severity::INFO, "", "", "", 0);
     TEST_ASSERT(msg2.msg.empty(), "LogMsg msg should allow empty string");
     TEST_ASSERT(msg2.source.empty(), "LogMsg source should allow empty string");
     TEST_ASSERT(msg2.timestamp.empty(), "LogMsg timestamp should allow empty string");
@@ -117,7 +116,10 @@ void test_all_severity_macros()
     TEST_ASSERT_NO_THROW(LOG_FATAL("Testing LOG_FATAL macro execution"), "LOG_FATAL macro should not throw");
 
     // Direct invocation via FastLog::logMsg
-    TEST_ASSERT_NO_THROW(FastLog::getInstance().logMsg("CUSTOM", "Direct API invocation message", "custom.cpp", 100),
+    TEST_ASSERT_NO_THROW(FastLog::getInstance().logMsg(Severity::INFO,
+                                                       "Direct API invocation message",
+                                                       "custom.cpp",
+                                                       100),
                          "Direct logMsg method call should not throw");
 
     FastLog::getInstance().flush();

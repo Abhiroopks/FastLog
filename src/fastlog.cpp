@@ -6,11 +6,11 @@
 #include <sstream>
 
 // Constructor for LogMsg struct.
-LogMsg::LogMsg(const std::string level,
-               const std::string msg,
-               const std::string source,
+LogMsg::LogMsg(const Severity level,
+               const std::string_view msg,
+               const std::string_view source,
                const std::string timestamp,
-               const int line)
+               const unsigned int line)
     : level(level)
     , msg(msg)
     , source(source)
@@ -87,10 +87,10 @@ void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferS
 }
 
 // used to log messages to stdout / file
-void FastLog::logMsg(const std::string &level,
-                     const std::string &msg,
-                     const std::string &source,
-                     const int line)
+void FastLog::logMsg(Severity level,
+                     const std::string_view &msg,
+                     const std::string_view &source,
+                     const unsigned int line)
 {
     if (finished.load()) {
         std::cout << "Attempting to log a message after logger deleted.";
@@ -130,9 +130,9 @@ void FastLog::writeLoop()
         }
 
         std::ostringstream oss;
-        oss << "{\"timestamp\":\"" << logMsg.timestamp << "\",\"level\":\"" << logMsg.level
-            << "\",\"source\":\"" << logMsg.source << "\",\"line\":" << logMsg.line << ",\"msg\":\""
-            << logMsg.msg << "\"}\n";
+        oss << "{\"timestamp\":\"" << logMsg.timestamp << "\",\"level\":\""
+            << sev_map[static_cast<size_t>(logMsg.level)] << "\",\"source\":\"" << logMsg.source
+            << "\",\"line\":" << logMsg.line << ",\"msg\":\"" << logMsg.msg << "\"}\n";
         writeBuffer.append(oss.str());
 
         bufferMsgCount++;
@@ -165,7 +165,7 @@ void FastLog::flushBuffer()
 void FastLog::flush()
 {
     // use a special LogMsg to force a flush to disk.
-    logMsg("", "", "", -1);
+    logMsg(Severity::DEBUG, "", "", -1);
 }
 
 int FastLog::getLogCount()

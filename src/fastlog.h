@@ -2,36 +2,48 @@
 #define FASTLOG_H
 
 #include "FastLog_global.h"
+#include <array>
 #include <atomic>
 #include <blockingconcurrentqueue.h>
 #include <concurrentqueue.h>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <thread>
 
-#define LOG_INFO(MSG) FastLog::getInstance().logMsg("INFO", MSG, __FILE__, __LINE__)
-#define LOG_DEBUG(MSG) FastLog::getInstance().logMsg("DEBUG", MSG, __FILE__, __LINE__)
-#define LOG_WARNING(MSG) FastLog::getInstance().logMsg("WARNING", MSG, __FILE__, __LINE__)
-#define LOG_CRITICAL(MSG) FastLog::getInstance().logMsg("CRITICAL", MSG, __FILE__, __LINE__)
-#define LOG_FATAL(MSG) FastLog::getInstance().logMsg("FATAL", MSG, __FILE__, __LINE__)
+enum class Severity { INFO, DEBUG, WARNING, CRITICAL, FATAL, COUNT };
+
+const std::array<std::string_view, static_cast<size_t>(Severity::COUNT)> sev_map = {
+    "INFO",
+    "DEBUG",
+    "WARNING",
+    "CRITICAL",
+    "FATAL",
+};
+
+#define LOG_INFO(MSG) FastLog::getInstance().logMsg(Severity::INFO, MSG, __FILE__, __LINE__)
+#define LOG_DEBUG(MSG) FastLog::getInstance().logMsg(Severity::DEBUG, MSG, __FILE__, __LINE__)
+#define LOG_WARNING(MSG) FastLog::getInstance().logMsg(Severity::WARNING, MSG, __FILE__, __LINE__)
+#define LOG_CRITICAL(MSG) FastLog::getInstance().logMsg(Severity::CRITICAL, MSG, __FILE__, __LINE__)
+#define LOG_FATAL(MSG) FastLog::getInstance().logMsg(Severity::FATAL, MSG, __FILE__, __LINE__)
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
 
 // Struct to encapsulate all info for a single log message.
 struct LogMsg
 {
-    std::string level;
-    std::string msg;
-    std::string source;
+    Severity level;
+    std::string_view msg;
+    std::string_view source;
     std::string timestamp;
-    int line;
+    unsigned int line;
 
     LogMsg() = default;
-    LogMsg(const std::string level,
-           const std::string msg,
-           const std::string source,
+    LogMsg(const Severity level,
+           const std::string_view msg,
+           const std::string_view source,
            const std::string timestamp,
-           const int line);
+           const unsigned int line);
 };
 
 class FASTLOG_EXPORT FastLog
@@ -44,10 +56,10 @@ public:
                            unsigned int bufferSize = DEFAULT_BUFFER_SIZE);
 
     // used to log messages to stdout / file
-    void logMsg(const std::string &level,
-                const std::string &msg,
-                const std::string &source,
-                const int line);
+    void logMsg(const Severity level,
+                const std::string_view &msg,
+                const std::string_view &source,
+                const unsigned int line);
 
     int getLogCount();
 
