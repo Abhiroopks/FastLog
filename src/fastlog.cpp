@@ -3,21 +3,14 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <mutex>
-#include <source_location>
 #include <sstream>
 
-#include <nlohmann/json.hpp>
-
-// for convenience
-using json = nlohmann::json;
-
 // Constructor for LogMsg struct.
-LogMsg::LogMsg(const std::string level,
-               const std::string msg,
-               const std::string source,
+LogMsg::LogMsg(const Severity level,
+               const std::string_view msg,
+               const std::string_view source,
                const std::string timestamp,
-               const int line)
+               const unsigned int line)
     : level(level)
     , msg(msg)
     , source(source)
@@ -40,20 +33,19 @@ FastLog::FastLog()
         return;
     }
 
-    *outputFile << "[";
-
     writer = std::thread([this] { this->writeLoop(); });
+
+    writeBuffer.reserve(BUFFER_SIZE);
 }
 
 FastLog::~FastLog()
 {
-    finished = true;
-    cv.notify_all();
+    finished.store(true);
+
     if (writer.joinable()) {
         writer.join();
     }
 
-    *outputFile << std::endl << "]" << std::endl;
     outputFile->close();
     delete outputFile;
 
@@ -78,8 +70,9 @@ FastLog &FastLog::getInstance()
  * @brief FastLog::initialize initializes the file name and stdout param.
  * @param fileName the path to file where logs will be saved.
  * @param stdOut whether or not messages should be printed to stdout.
+ * @param bufferSize the size, in bytes, of the writeBuffer. Defaults to 16 KB.
  */
-void FastLog::initialize(std::string fileName, bool stdOut)
+void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferSize)
 {
     if (initialized) {
         std::cout << "already initialized FastLog" << std::endl;
@@ -88,71 +81,62 @@ void FastLog::initialize(std::string fileName, bool stdOut)
 
     FILE_NAME = fileName;
     STD_OUT = stdOut;
+    BUFFER_SIZE = bufferSize;
 
     initialized = true;
 }
 
 // used to log messages to stdout / file
-void FastLog::logMsg(const std::string &level,
-                     const std::string &msg,
-                     const std::string &source,
-                     const int line)
+void FastLog::logMsg(Severity level,
+                     const std::string_view &msg,
+                     const std::string_view &source,
+                     const unsigned int line)
 {
-    if (finished) {
+    if (finished.load()) {
         std::cout << "Attempting to log a message after logger deleted.";
         return;
     }
 
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        messages.push(LogMsg(level, msg, source, FastLog::getTimestamp(), line));
-    }
-
-    cv.notify_one();
+    messages.enqueue(LogMsg(level, msg, source, FastLog::getTimestamp(), line));
 }
 
 void FastLog::writeLoop()
 {
-    LogMsg *logMsg;
+    LogMsg logMsg;
 
     while (true) {
-        std::unique_lock<std::mutex> lock(mtx);
-        // Wait until there is data or a finish signal
-        cv.wait(lock, [&]() { return !messages.empty() || finished; });
-
-        if (finished && messages.empty())
+        if (finished.load() && messages.size_approx() == 0) {
             break;
+        }
 
-        if (!messages.empty()) {
-            logMsg = &messages.front();
+        messages.wait_dequeue_timed(logMsg, std::chrono::milliseconds(100));
+
+        // Check if this a special flush request
+        if (logMsg.line == -1) {
+            flushBuffer();
+
+            // no need to process this msg, as it's just
+            // a flush request.
+            continue;
+        }
+
+        if (writeBuffer.size() >= BUFFER_SIZE) {
+            flushBuffer();
         }
 
         // Process msg
         if (STD_OUT) {
-            std::cout << logMsg->msg << std::endl;
+            std::cout << logMsg.msg << std::endl;
         }
 
-        if (!outputFile->is_open()) {
-            std::cout << "Failed to open log file for writing" << std::endl;
-            return;
-        }
+        std::ostringstream oss;
+        oss << "{\"timestamp\":\"" << logMsg.timestamp << "\",\"level\":\""
+            << sev_map[static_cast<size_t>(logMsg.level)] << "\",\"source\":\"" << logMsg.source
+            << "\",\"line\":" << logMsg.line << ",\"msg\":\"" << logMsg.msg << "\"}\n";
+        writeBuffer.append(oss.str());
 
-        json j;
-        j["timestamp"] = getTimestamp();
-        j["level"] = logMsg->level;
-        j["source"] = logMsg->source;
-        j["line"] = logMsg->line;
-        j["msg"] = logMsg->msg;
+        bufferMsgCount++;
 
-        if (logCount > 0) {
-            *outputFile << ',';
-        }
-
-        *outputFile << std::endl << j.dump(4);
-
-        logCount++;
-
-        messages.pop();
     }
 }
 
@@ -166,6 +150,30 @@ const std::string FastLog::getTimestamp()
     return oss.str();
 }
 
+void FastLog::flushBuffer()
+{
+    if (!outputFile->is_open()) {
+        std::cout << "Failed to open log file for writing" << std::endl;
+        return;
+    }
+    *outputFile << writeBuffer;
+    logCount.fetch_add(bufferMsgCount);
+    bufferMsgCount = 0;
+    writeBuffer.clear();
+}
+
+void FastLog::flush()
+{
+    // use a special LogMsg to force a flush to disk.
+    logMsg(Severity::DEBUG, "", "", -1);
+}
+
+int FastLog::getLogCount()
+{
+    return logCount.load();
+}
+
 std::string FastLog::FILE_NAME = "";
 bool FastLog::STD_OUT = false;
 bool FastLog::initialized = false;
+unsigned int FastLog::BUFFER_SIZE = 0;

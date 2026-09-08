@@ -141,6 +141,9 @@ int main()
 - `FastLog &FastLog::getInstance()`
   - Returns the singleton instance of `FastLog`. Throws `std::runtime_error` if called before `FastLog::initialize()`.
 
+- `int FastLog::getLogCount()`
+  - Returns the total number of log entries written and flushed to the destination log file. Thread-safe (atomic access).
+
 ### Logging Macros
 
 The following macros automatically capture the source filename (`__FILE__`) and line number (`__LINE__`):
