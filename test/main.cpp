@@ -69,14 +69,45 @@ struct TestFailureException : public std::exception
         } \
     } while (0)
 
-// Test 1: Validate uninitialized FastLog::getInstance() throws std::runtime_error
+// Helper to wait until FastLog writes a specific target number of logs to file
+bool wait_for_written_log_count(int targetCount, double timeoutSeconds = 15.0)
+{
+    auto startWait = std::chrono::high_resolution_clock::now();
+    while (FastLog::getInstance().getLogCount() < targetCount) {
+        auto now = std::chrono::high_resolution_clock::now();
+        double elapsed = std::chrono::duration<double>(now - startWait).count();
+        if (elapsed > timeoutSeconds) {
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+    }
+    return true;
+}
+
+// waits for logCount in FastLog to stabilize and returns the count.
+int getStableCount()
+{
+    int stableCount = FastLog::getInstance().getLogCount();
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        int current = FastLog::getInstance().getLogCount();
+        if (current == stableCount) {
+            break;
+        }
+        stableCount = current;
+    }
+
+    return stableCount;
+}
+
+// Validate uninitialized FastLog::getInstance() throws std::runtime_error
 void test_uninitialized_access()
 {
     TEST_ASSERT_THROWS(FastLog::getInstance(), std::runtime_error,
                        "FastLog::getInstance() must throw std::runtime_error when called before initialization");
 }
 
-// Test 2: Validate initialization and idempotency of subsequent initialize() calls
+// Validate initialization and idempotency of subsequent initialize() calls
 void test_initialization_and_reinitialization()
 {
     TEST_ASSERT_NO_THROW(FastLog::initialize(LOG_FILE_NAME, ENABLE_STDOUT),
@@ -88,7 +119,7 @@ void test_initialization_and_reinitialization()
                          "Subsequent calls to FastLog::initialize should be safely ignored");
 }
 
-// Test 3: Validate LogMsg struct member initialization and field correctness
+// Validate LogMsg struct member initialization and field correctness
 void test_log_msg_structure()
 {
     LogMsg msg1(Severity::INFO, "Test message content", "test_source.cpp", "20-08-2026 12:00:00", 42);
@@ -106,7 +137,7 @@ void test_log_msg_structure()
     TEST_ASSERT(msg2.line == 0, "LogMsg line should allow 0");
 }
 
-// Test 4: Validate all standard severity logging macros and direct logMsg API
+// Validate all standard severity logging macros and direct logMsg API
 void test_all_severity_macros()
 {
     TEST_ASSERT_NO_THROW(LOG_DEBUG("Testing LOG_DEBUG macro execution"), "LOG_DEBUG macro should not throw");
@@ -125,7 +156,34 @@ void test_all_severity_macros()
     FastLog::getInstance().flush();
 }
 
-// Test 5: Validate handling of special characters, JSON formatting characters, and large payloads
+// Validate buffering behavior of logger write-to-disk.
+void test_buffer()
+{
+    int stableCount = getStableCount();
+
+    // This should not be enough data to flush the log buffer.
+    LOG_INFO("don't flush me");
+
+    bool success = wait_for_written_log_count(stableCount + 1, 0.1);
+    TEST_ASSERT(!success, "timed out waiting to flush a single log message.");
+}
+
+// Validate flush functionality.
+void test_flush()
+{
+    int stableCount = getStableCount();
+
+    // This should not be enough data to flush the log buffer.
+    LOG_INFO("Flush me");
+
+    // force flush
+    FastLog::getInstance().flush();
+
+    bool success = wait_for_written_log_count(stableCount + 1);
+    TEST_ASSERT(success, "timed out waiting to flush a single log message.");
+}
+
+// Validate handling of special characters, JSON formatting characters, and large payloads
 void test_special_characters_and_payloads()
 {
     TEST_ASSERT_NO_THROW(LOG_INFO("JSON quotes: \"val\", backslashes: \\, slashes: /"),
@@ -147,7 +205,7 @@ void test_special_characters_and_payloads()
     FastLog::getInstance().flush();
 }
 
-// Test 6: Validate concurrent multi-threaded logging safety across multiple worker threads
+// Validate concurrent multi-threaded logging safety across multiple worker threads
 void test_concurrent_multithreaded_logging()
 {
     const unsigned int numThreads = std::max(4u, std::thread::hardware_concurrency());
@@ -188,7 +246,7 @@ void test_concurrent_multithreaded_logging()
     FastLog::getInstance().flush();
 }
 
-// Test 7: Validate queue stability under high volume bursts
+// Validate queue stability under high volume bursts
 void test_high_volume_burst_logging()
 {
     const int totalMessages = 25000;
@@ -219,7 +277,7 @@ void test_high_volume_burst_logging()
     FastLog::getInstance().flush();
 }
 
-// Test 8: Performance test validating logging throughput and enqueue latency
+// Performance test validating logging throughput and enqueue latency
 void test_performance_throughput()
 {
     const int benchmarkLogs = 20000;
@@ -269,35 +327,22 @@ void test_performance_throughput()
     FastLog::getInstance().flush();
 }
 
-// Helper to wait until FastLog writes a specific target number of logs to file
-bool wait_for_written_log_count(int targetCount, double timeoutSeconds = 15.0)
-{
-    auto startWait = std::chrono::high_resolution_clock::now();
-    while (FastLog::getInstance().getLogCount() < targetCount) {
-        auto now = std::chrono::high_resolution_clock::now();
-        double elapsed = std::chrono::duration<double>(now - startWait).count();
-        if (elapsed > timeoutSeconds) {
-            return false;
-        }
-        std::this_thread::sleep_for(std::chrono::microseconds(200));
-    }
-    return true;
-}
-
-// Test 9: Performance test validating disk/file write throughput and drain latency using getLogCount()
+// Performance test validating disk/file write throughput and drain latency using getLogCount()
 void test_file_write_throughput()
 {
     // First ensure any pending log messages from prior tests have been completely written to file
     // by waiting for the log count to stabilize.
-    int stableCount = FastLog::getInstance().getLogCount();
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        int current = FastLog::getInstance().getLogCount();
-        if (current == stableCount) {
-            break;
-        }
-        stableCount = current;
-    }
+    // int stableCount = FastLog::getInstance().getLogCount();
+    // while (true) {
+    //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    //     int current = FastLog::getInstance().getLogCount();
+    //     if (current == stableCount) {
+    //         break;
+    //     }
+    //     stableCount = current;
+    // }
+
+    int stableCount = getStableCount();
 
     const int testLogs = 5000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
@@ -478,6 +523,8 @@ int main()
     suite.addTest("TestInitializationAndReinitialization", test_initialization_and_reinitialization);
     suite.addTest("TestLogMsgStructure", test_log_msg_structure);
     suite.addTest("TestAllSeverityMacros", test_all_severity_macros);
+    suite.addTest("TestBuffer", test_buffer);
+    suite.addTest("TestFlush", test_flush);
     suite.addTest("TestSpecialCharactersAndPayloads", test_special_characters_and_payloads);
     suite.addTest("TestConcurrentMultiThreadedLogging", test_concurrent_multithreaded_logging);
     suite.addTest("TestHighVolumeBurstLogging", test_high_volume_burst_logging);
