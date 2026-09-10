@@ -159,19 +159,19 @@ void test_all_severity_macros()
 // Validate buffering behavior of logger write-to-disk.
 void test_buffer()
 {
-    int stableCount = getStableCount();
+    const int stableCount = getStableCount();
 
     // This should not be enough data to flush the log buffer.
     LOG_INFO("don't flush me");
 
-    bool success = wait_for_written_log_count(stableCount + 1, 0.1);
+    const bool success = wait_for_written_log_count(stableCount + 1, 0.1);
     TEST_ASSERT(!success, "timed out waiting to flush a single log message.");
 }
 
 // Validate flush functionality.
 void test_flush()
 {
-    int stableCount = getStableCount();
+    const int stableCount = getStableCount();
 
     // This should not be enough data to flush the log buffer.
     LOG_INFO("Flush me");
@@ -179,7 +179,7 @@ void test_flush()
     // force flush
     FastLog::getInstance().flush();
 
-    bool success = wait_for_written_log_count(stableCount + 1);
+    const bool success = wait_for_written_log_count(stableCount + 1);
     TEST_ASSERT(success, "timed out waiting to flush a single log message.");
 }
 
@@ -330,24 +330,12 @@ void test_performance_throughput()
 // Performance test validating disk/file write throughput and drain latency using getLogCount()
 void test_file_write_throughput()
 {
-    // First ensure any pending log messages from prior tests have been completely written to file
-    // by waiting for the log count to stabilize.
-    // int stableCount = FastLog::getInstance().getLogCount();
-    // while (true) {
-    //     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    //     int current = FastLog::getInstance().getLogCount();
-    //     if (current == stableCount) {
-    //         break;
-    //     }
-    //     stableCount = current;
-    // }
 
-    int stableCount = getStableCount();
+    const int startLogCount = getStableCount();
 
     const int testLogs = 5000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
     const int logsPerThread = testLogs / numThreads;
-    const int startLogCount = FastLog::getInstance().getLogCount();
     const int expectedFinalCount = startLogCount + testLogs;
 
     std::vector<std::thread> threads;
