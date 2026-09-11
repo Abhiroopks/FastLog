@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    name: Test (${{ matrix.compiler }} - ${{ matrix.build_type }})
+    name: Test (${{ matrix.compiler }} - Release
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -35,7 +35,7 @@ jobs:
           -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }}
 
       - name: Build Library and Test Suite
-        run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --parallel
+        run: cmake --build ${{ github.workspace }}/build --config Release --parallel
 
       - name: Run CTest
-        run: ctest -V --test-dir ${{ github.workspace }}/build --output-on-failure -C ${{ matrix.build_type }}
+        run: ctest -V --test-dir ${{ github.workspace }}/build --output-on-failure -C Release
