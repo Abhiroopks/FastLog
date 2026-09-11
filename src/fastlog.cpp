@@ -32,9 +32,8 @@ FastLog::FastLog()
         return;
     }
 
-    writer = std::thread([this] { this->writeLoop(); });
-
     writeBuffer.reserve(BUFFER_SIZE);
+    writer = std::thread([this] { this->writeLoop(); });
 }
 
 FastLog::~FastLog()
@@ -106,7 +105,13 @@ void FastLog::writeLoop()
             break;
         }
 
-        messages.wait_dequeue_timed(logMsg, std::chrono::milliseconds(100));
+        bool success = messages.wait_dequeue_timed(logMsg, std::chrono::milliseconds(1000));
+
+        // got nothing from queue, restart loop.
+        if(!success){
+            continue;
+        }
+
 
         // Check if this a special flush request
         if (logMsg.line == -1) {
