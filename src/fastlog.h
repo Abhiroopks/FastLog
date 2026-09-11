@@ -8,12 +8,11 @@
 #include <concurrentqueue.h>
 #include <fstream>
 #include <string>
-#include <string_view>
 #include <thread>
 
 enum class Severity { INFO, DEBUG, WARNING, CRITICAL, FATAL, COUNT };
 
-const std::array<std::string_view, static_cast<size_t>(Severity::COUNT)> sev_map = {
+const std::array<std::string, static_cast<size_t>(Severity::COUNT)> sev_map = {
     "INFO",
     "DEBUG",
     "WARNING",
@@ -21,11 +20,16 @@ const std::array<std::string_view, static_cast<size_t>(Severity::COUNT)> sev_map
     "FATAL",
 };
 
-#define LOG_INFO(MSG) FastLog::getInstance().logMsg(Severity::INFO, MSG, __FILE__, __LINE__)
-#define LOG_DEBUG(MSG) FastLog::getInstance().logMsg(Severity::DEBUG, MSG, __FILE__, __LINE__)
-#define LOG_WARNING(MSG) FastLog::getInstance().logMsg(Severity::WARNING, MSG, __FILE__, __LINE__)
-#define LOG_CRITICAL(MSG) FastLog::getInstance().logMsg(Severity::CRITICAL, MSG, __FILE__, __LINE__)
-#define LOG_FATAL(MSG) FastLog::getInstance().logMsg(Severity::FATAL, MSG, __FILE__, __LINE__)
+#define LOG_INFO(MSG) \
+    FastLog::getInstance().logMsg(Severity::INFO, std::move(MSG), std::move(__FILE__), __LINE__)
+#define LOG_DEBUG(MSG) \
+    FastLog::getInstance().logMsg(Severity::DEBUG, std::move(MSG), std::move(__FILE__), __LINE__)
+#define LOG_WARNING(MSG) \
+    FastLog::getInstance().logMsg(Severity::WARNING, std::move(MSG), std::move(__FILE__), __LINE__)
+#define LOG_CRITICAL(MSG) \
+    FastLog::getInstance().logMsg(Severity::CRITICAL, std::move(MSG), std::move(__FILE__), __LINE__)
+#define LOG_FATAL(MSG) \
+    FastLog::getInstance().logMsg(Severity::FATAL, std::move(MSG), std::move(__FILE__), __LINE__)
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
 
@@ -33,16 +37,16 @@ const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
 struct LogMsg
 {
     Severity level;
-    std::string_view msg;
-    std::string_view source;
+    std::string msg;
+    std::string source;
     std::string timestamp;
     unsigned int line;
 
     LogMsg() = default;
     LogMsg(const Severity level,
-           const std::string_view msg,
-           const std::string_view source,
-           const std::string timestamp,
+           std::string msg,
+           std::string source,
+           std::string timestamp,
            const unsigned int line);
 };
 
@@ -56,10 +60,7 @@ public:
                            unsigned int bufferSize = DEFAULT_BUFFER_SIZE);
 
     // used to log messages to stdout / file
-    void logMsg(const Severity level,
-                const std::string_view &msg,
-                const std::string_view &source,
-                const unsigned int line);
+    void logMsg(const Severity level, std::string msg, std::string source, const unsigned int line);
 
     int getLogCount();
 
@@ -71,12 +72,11 @@ private:
     FastLog();
     ~FastLog();
     void writeLoop();
-    const std::string getTimestamp();
+    std::string getTimestamp();
     void flushBuffer();
 
     std::thread writer;
     std::atomic<bool> finished;
-    // std::queue<LogMsg> messages;
     moodycamel::BlockingConcurrentQueue<LogMsg> messages;
     std::ofstream *outputFile;
     std::atomic<int> logCount;

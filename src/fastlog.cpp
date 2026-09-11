@@ -3,13 +3,12 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 
 // Constructor for LogMsg struct.
 LogMsg::LogMsg(const Severity level,
-               const std::string_view msg,
-               const std::string_view source,
-               const std::string timestamp,
+               std::string msg,
+               std::string source,
+               std::string timestamp,
                const unsigned int line)
     : level(level)
     , msg(msg)
@@ -87,17 +86,15 @@ void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferS
 }
 
 // used to log messages to stdout / file
-void FastLog::logMsg(Severity level,
-                     const std::string_view &msg,
-                     const std::string_view &source,
-                     const unsigned int line)
+void FastLog::logMsg(Severity level, std::string msg, std::string source, const unsigned int line)
 {
     if (finished.load()) {
         std::cout << "Attempting to log a message after logger deleted.";
         return;
     }
 
-    messages.enqueue(LogMsg(level, msg, source, FastLog::getTimestamp(), line));
+    messages.enqueue(
+        LogMsg(level, std::move(msg), std::move(source), FastLog::getTimestamp(), line));
 }
 
 void FastLog::writeLoop()
@@ -129,18 +126,17 @@ void FastLog::writeLoop()
             std::cout << logMsg.msg << std::endl;
         }
 
-        std::ostringstream oss;
-        oss << "{\"timestamp\":\"" << logMsg.timestamp << "\",\"level\":\""
-            << sev_map[static_cast<size_t>(logMsg.level)] << "\",\"source\":\"" << logMsg.source
-            << "\",\"line\":" << logMsg.line << ",\"msg\":\"" << logMsg.msg << "\"}\n";
-        writeBuffer.append(oss.str());
+        writeBuffer.append("{\"timestamp\":\"" + logMsg.timestamp + "\",\"level\":\""
+                           + sev_map[static_cast<size_t>(logMsg.level)] + "\",\"source\":\""
+                           + logMsg.source + "\",\"line\":" + std::to_string(logMsg.line)
+                           + ",\"msg\":\"" + logMsg.msg + "\"}\n");
 
         bufferMsgCount++;
 
     }
 }
 
-const std::string FastLog::getTimestamp()
+std::string FastLog::getTimestamp()
 {
     std::time_t now = std::time(nullptr);
     std::tm *tm_info = std::localtime(&now);
@@ -165,7 +161,7 @@ void FastLog::flushBuffer()
 void FastLog::flush()
 {
     // use a special LogMsg to force a flush to disk.
-    logMsg(Severity::DEBUG, "", "", -1);
+    logMsg(Severity::DEBUG, std::move(""), std::move(""), -1);
 }
 
 int FastLog::getLogCount()
