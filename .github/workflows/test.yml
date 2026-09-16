@@ -38,4 +38,4 @@ jobs:
         run: cmake --build ${{ github.workspace }}/build --config Release --parallel
 
       - name: Run CTest
-        run: ctest -V --test-dir ${{ github.workspace }}/build --output-on-failure -C Release
+        run: ctest -V --test-dir ${{ github.workspace }}/build/test --output-on-failure -C Release
