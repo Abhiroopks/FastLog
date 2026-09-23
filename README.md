@@ -1,6 +1,6 @@
 # FastLog
 
-A high-performance, asynchronous, thread-safe C++ logging library that outputs structured (JSON Lines)[https://jsonlines.org/] logs.
+A high-performance, asynchronous, thread-safe C++ logging library that outputs structured [JSON Lines](https://jsonlines.org/) logs.
 
 ---
 
@@ -172,4 +172,37 @@ FastLog writes structured JSON entries to the configured log file:
 ## Building and Running Tests
 
 To build the library and run the included multi-threaded test suite, use the provided convenience bash script: `run_tests.sh`
+
+## Performance
+
+System Info:
+```bash
+=== CPU ===
+CPU(s):                                  8
+On-line CPU(s) list:                     0-7
+Model name:                              AMD Ryzen 3 5300U with Radeon Graphics
+Thread(s) per core:                      2
+Core(s) per socket:                      4
+Socket(s):                               1
+CPU(s) scaling MHz:                      59%
+CPU max MHz:                             3900.0000
+CPU min MHz:                             412.9420
+NUMA node0 CPU(s):                       0-7
+=== RAM ===
+               total        used        free      shared  buff/cache   available
+Mem:           7.1Gi       3.3Gi       1.1Gi        67Mi       3.1Gi       3.8Gi
+=== Disk ===
+NAME      SIZE TYPE MODEL                ROTA
+nvme0n1 476.9G disk UMIS RPJTJ512MGE1QDY    0
+=== OS ===
+Linux 7.0.0-31-generic
+PRETTY_NAME="Linux Mint 22.3"
+```
+
+Benchmarked on the hardware described above.
+
+| Test | Throughput | Avg Latency | Total Time |
+|------|-----------|-------------|------------|
+| Enqueue throughput | 629,078 msgs/sec | 1.59 µs/msg | 32.13 ms |
+| File write throughput | 577,079 logs/sec | 1.73 µs/log | 29.59 ms |
 
