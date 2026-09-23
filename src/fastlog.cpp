@@ -1,5 +1,5 @@
 #include "fastlog.h"
-#include <ctime>
+#include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -143,12 +143,8 @@ void FastLog::writeLoop()
 
 std::string FastLog::getTimestamp()
 {
-    std::time_t now = std::time(nullptr);
-    std::tm *tm_info = std::localtime(&now);
-    std::ostringstream oss;
-    // Format: DD-MM-YYYY HH-MM-SS
-    oss << std::put_time(tm_info, "%d-%m-%Y %H:%M:%S");
-    return oss.str();
+    auto local = std::chrono::current_zone()->to_local(std::chrono::system_clock::now());
+    return std::format("{:%d-%m-%Y %H:%M:%S}", local);
 }
 
 void FastLog::flushBuffer()
