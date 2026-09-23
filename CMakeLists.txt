@@ -10,19 +10,11 @@ include(FetchContent)
 FetchContent_Declare(
     LockFreeRingBuffer
     GIT_REPOSITORY  https://github.com/Abhiroopks/LockFreeRingBuffer.git
-    # GIT_REPOSITORY  git@github.com:Abhiroopks/LockFreeRingBuffer.git
-    GIT_TAG         v1.0.0
-    GIT_PROGRESS    TRUE
+    GIT_TAG         v1.1.1
+    EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(LockFreeRingBuffer)
 
-# FetchContent_Declare(
-#     concurrentqueue
-#     GIT_REPOSITORY https://github.com/cameron314/concurrentqueue.git
-#     GIT_TAG        v1.0.5
-# )
-# 
-# FetchContent_MakeAvailable(concurrentqueue)
 
 # Enable testing
 enable_testing()

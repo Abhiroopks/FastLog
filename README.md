@@ -1,6 +1,6 @@
 # FastLog
 
-A high-performance, asynchronous, thread-safe C++ logging library that outputs structured JSON logs.
+A high-performance, asynchronous, thread-safe C++ logging library that outputs structured (JSON Lines)[https://jsonlines.org/] logs.
 
 ---
 
@@ -8,7 +8,7 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 
 - **Asynchronous & Non-Blocking**: Log messages are queued and dispatched by a dedicated background worker thread.
 - **Thread-Safe**: Multiple threads can safely log concurrently without data races or lock contention on I/O.
-- **Structured JSON Output**: Logs are formatted into clean JSON records for easy parsing and log analysis.
+- **Structured JSONL Output**: Logs are formatted into clean JSONL records for easy parsing and log analysis.
 - **Convenient Logging Macros**: Automatically captures source file name, line number, log level, and timestamp.
 - **Dual Output Support**: Logs to a specified file and optionally mirrors output to standard output (`stdout`).
 
@@ -16,8 +16,8 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 
 ## Requirements
 
-- **C++17** or higher
-- **CMake 3.16** or higher
+- **C++20** or higher
+- **CMake 3.20** or higher
 
 ---
 
@@ -30,10 +30,10 @@ You can integrate FastLog into your CMake project using either **CMake FetchCont
 Add the following to your project's `CMakeLists.txt`:
 
 ```cmake
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(MyProject LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
@@ -163,37 +163,13 @@ The following macros automatically capture the source filename (`__FILE__`) and 
 FastLog writes structured JSON entries to the configured log file:
 
 ```json
-[
-    {
-        "timestamp": "20-08-2026 10:15:30",
-        "level": "INFO",
-        "source": "/home/user/project/main.cpp",
-        "line": 10,
-        "msg": "Application initialized successfully"
-    },
-    {
-        "timestamp": "20-08-2026 10:15:31",
-        "level": "WARNING",
-        "source": "/home/user/project/main.cpp",
-        "line": 12,
-        "msg": "Disk space is below 20%"
-    }
-]
+{"timestamp":"23-09-2026 16:22:28","level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing LOG_DEBUG macro execution"}
+{"timestamp":"23-09-2026 16:22:28","level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing LOG_INFO macro execution"}
 ```
 
 ---
 
 ## Building and Running Tests
 
-To build the library and run the included multi-threaded test suite:
+To build the library and run the included multi-threaded test suite, use the provided convenience bash script: `run_tests.sh`
 
-```bash
-# Configure the build
-cmake -B build -S .
-
-# Build targets
-cmake --build build
-
-# Run the test executable
-./build/test/FastLogTest
-```
