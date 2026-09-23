@@ -25,6 +25,7 @@ LogMsg::LogMsg(const Severity level,
 FastLog::FastLog()
     : finished(false)
     , logCount(0)
+    , messages(LOG_QUEUE_SIZE)
 {
     outputFile = new std::ofstream(FILE_NAME, std::ofstream::out);
     if (!outputFile->is_open()) {
@@ -68,9 +69,13 @@ FastLog &FastLog::getInstance()
  * @brief FastLog::initialize initializes the file name and stdout param.
  * @param fileName the path to file where logs will be saved.
  * @param stdOut whether or not messages should be printed to stdout.
- * @param bufferSize the size, in bytes, of the writeBuffer. Defaults to 16 KB.
+ * @param bufferSize the max size, in bytes, of the writeBuffer. Defaults to 16 KB.
+ * @param queueSize the max size, in number of log messages, of the queue of log msgs. Defaults to 2^20 ~ 1 million.
  */
-void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferSize)
+void FastLog::initialize(std::string fileName,
+                         bool stdOut,
+                         unsigned int bufferSize,
+                         unsigned int queueSize)
 {
     if (initialized) {
         std::cout << "already initialized FastLog" << std::endl;
@@ -80,6 +85,7 @@ void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferS
     FILE_NAME = fileName;
     STD_OUT = stdOut;
     BUFFER_SIZE = bufferSize;
+    LOG_QUEUE_SIZE = queueSize;
 
     initialized = true;
 }
@@ -92,8 +98,7 @@ void FastLog::logMsg(Severity level, std::string msg, std::string source, const 
         return;
     }
 
-    messages.enqueue(
-        LogMsg(level, std::move(msg), std::move(source), FastLog::getTimestamp(), line));
+    messages.push(LogMsg(level, std::move(msg), std::move(source), FastLog::getTimestamp(), line));
 }
 
 void FastLog::writeLoop()
@@ -101,11 +106,11 @@ void FastLog::writeLoop()
     LogMsg logMsg;
 
     while (true) {
-        if (finished.load() && messages.size_approx() == 0) {
+        if (finished.load()) {
             break;
         }
 
-        bool success = messages.wait_dequeue_timed(logMsg, std::chrono::milliseconds(1000));
+        bool success = messages.pop(logMsg);
 
         // got nothing from queue, restart loop.
         if(!success){
@@ -174,3 +179,4 @@ std::string FastLog::FILE_NAME = "";
 bool FastLog::STD_OUT = false;
 bool FastLog::initialized = false;
 unsigned int FastLog::BUFFER_SIZE = 0;
+unsigned int FastLog::LOG_QUEUE_SIZE = 0;

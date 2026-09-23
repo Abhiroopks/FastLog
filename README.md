@@ -1,6 +1,6 @@
 # FastLog
 
-A high-performance, asynchronous, thread-safe C++ logging library that outputs structured JSON logs.
+A high-performance, asynchronous, thread-safe C++ logging library that outputs structured [JSON Lines](https://jsonlines.org/) logs.
 
 ---
 
@@ -8,7 +8,7 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 
 - **Asynchronous & Non-Blocking**: Log messages are queued and dispatched by a dedicated background worker thread.
 - **Thread-Safe**: Multiple threads can safely log concurrently without data races or lock contention on I/O.
-- **Structured JSON Output**: Logs are formatted into clean JSON records for easy parsing and log analysis.
+- **Structured JSONL Output**: Logs are formatted into clean JSONL records for easy parsing and log analysis.
 - **Convenient Logging Macros**: Automatically captures source file name, line number, log level, and timestamp.
 - **Dual Output Support**: Logs to a specified file and optionally mirrors output to standard output (`stdout`).
 
@@ -16,8 +16,8 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 
 ## Requirements
 
-- **C++17** or higher
-- **CMake 3.16** or higher
+- **C++20** or higher
+- **CMake 3.20** or higher
 
 ---
 
@@ -30,10 +30,10 @@ You can integrate FastLog into your CMake project using either **CMake FetchCont
 Add the following to your project's `CMakeLists.txt`:
 
 ```cmake
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(MyProject LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
@@ -163,37 +163,46 @@ The following macros automatically capture the source filename (`__FILE__`) and 
 FastLog writes structured JSON entries to the configured log file:
 
 ```json
-[
-    {
-        "timestamp": "20-08-2026 10:15:30",
-        "level": "INFO",
-        "source": "/home/user/project/main.cpp",
-        "line": 10,
-        "msg": "Application initialized successfully"
-    },
-    {
-        "timestamp": "20-08-2026 10:15:31",
-        "level": "WARNING",
-        "source": "/home/user/project/main.cpp",
-        "line": 12,
-        "msg": "Disk space is below 20%"
-    }
-]
+{"timestamp":"23-09-2026 16:22:28","level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing LOG_DEBUG macro execution"}
+{"timestamp":"23-09-2026 16:22:28","level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing LOG_INFO macro execution"}
 ```
 
 ---
 
 ## Building and Running Tests
 
-To build the library and run the included multi-threaded test suite:
+To build the library and run the included multi-threaded test suite, use the provided convenience bash script: `run_tests.sh`
 
+## Performance
+
+System Info:
 ```bash
-# Configure the build
-cmake -B build -S .
-
-# Build targets
-cmake --build build
-
-# Run the test executable
-./build/test/FastLogTest
+=== CPU ===
+CPU(s):                                  8
+On-line CPU(s) list:                     0-7
+Model name:                              AMD Ryzen 3 5300U with Radeon Graphics
+Thread(s) per core:                      2
+Core(s) per socket:                      4
+Socket(s):                               1
+CPU(s) scaling MHz:                      59%
+CPU max MHz:                             3900.0000
+CPU min MHz:                             412.9420
+NUMA node0 CPU(s):                       0-7
+=== RAM ===
+               total        used        free      shared  buff/cache   available
+Mem:           7.1Gi       3.3Gi       1.1Gi        67Mi       3.1Gi       3.8Gi
+=== Disk ===
+NAME      SIZE TYPE MODEL                ROTA
+nvme0n1 476.9G disk UMIS RPJTJ512MGE1QDY    0
+=== OS ===
+Linux 7.0.0-31-generic
+PRETTY_NAME="Linux Mint 22.3"
 ```
+
+Benchmarked on the hardware described above.
+
+| Test | Throughput | Avg Latency | Total Time |
+|------|-----------|-------------|------------|
+| Enqueue throughput | 629,078 msgs/sec | 1.59 µs/msg | 32.13 ms |
+| File write throughput | 577,079 logs/sec | 1.73 µs/log | 29.59 ms |
+

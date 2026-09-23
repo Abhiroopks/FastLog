@@ -4,9 +4,10 @@
 #include "FastLog_global.h"
 #include <array>
 #include <atomic>
-#include <blockingconcurrentqueue.h>
-#include <concurrentqueue.h>
+// #include <blockingconcurrentqueue.h>
+// #include <concurrentqueue.h>
 #include <fstream>
+#include <lfrb.hpp>
 #include <string>
 #include <thread>
 
@@ -32,6 +33,7 @@ const std::array<std::string, static_cast<size_t>(Severity::COUNT)> sev_map = {
     FastLog::getInstance().logMsg(Severity::FATAL, std::move(MSG), std::move(__FILE__), __LINE__)
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
+const unsigned int DEFAULT_LOG_QUEUE_SIZE = (1 << 20);
 
 // Struct to encapsulate all info for a single log message.
 struct LogMsg
@@ -57,7 +59,8 @@ public:
     static FastLog &getInstance();
     static void initialize(std::string fileName,
                            bool stdOut,
-                           unsigned int bufferSize = DEFAULT_BUFFER_SIZE);
+                           unsigned int bufferSize = DEFAULT_BUFFER_SIZE,
+                           unsigned queueSize = DEFAULT_LOG_QUEUE_SIZE);
 
     // used to log messages to stdout / file
     void logMsg(const Severity level, std::string msg, std::string source, const unsigned int line);
@@ -77,7 +80,7 @@ private:
 
     std::thread writer;
     std::atomic<bool> finished;
-    moodycamel::BlockingConcurrentQueue<LogMsg> messages;
+    LockFreeRingBuffer<LogMsg> messages;
     std::ofstream *outputFile;
     std::atomic<int> logCount;
     unsigned int bufferMsgCount;
@@ -87,6 +90,7 @@ private:
     static std::string FILE_NAME;
     static bool STD_OUT;
     static unsigned int BUFFER_SIZE;
+    static unsigned int LOG_QUEUE_SIZE;
 };
 
 #endif // FASTLOG_H
