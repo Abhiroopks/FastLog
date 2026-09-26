@@ -22,4 +22,11 @@ enable_testing()
 # Add subdirectories
 # The library must be added before the test if the test depends on it
 add_subdirectory(src)
-add_subdirectory(test)
+
+option(BUILD_TESTING "Build tests" OFF)
+
+# Testing configuration
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(test)
+endif()
