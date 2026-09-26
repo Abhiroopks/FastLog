@@ -2,12 +2,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <exception>
-#include <functional>
 #include <gtest/gtest.h>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -86,6 +83,11 @@ TEST(FastLogTest, test_log_msg_structure)
     ASSERT_TRUE(msg2.line == 0) << "LogMsg line should allow 0";
 }
 
+TEST(FastLogTest, test_fatal)
+{
+    ASSERT_DEATH(LOG_FATAL("Fatal exception, test will terminate."), "");
+}
+
 // Validate all standard severity logging macros and direct logMsg API
 TEST(FastLogTest, test_all_severity_macros)
 {
@@ -97,9 +99,6 @@ TEST(FastLogTest, test_all_severity_macros)
         << "LOG_WARNING macro should not throw";
     ASSERT_NO_THROW(LOG_CRITICAL("Testing LOG_CRITICAL macro execution"))
         << "LOG_CRITICAL macro should not throw";
-
-    // TODO: Use gtest DEATH_TEST to validate the fatal log.
-    // ASSERT_NO_THROW(LOG_FATAL("Testing LOG_FATAL macro execution"), "LOG_FATAL macro should not throw");
 
     // Direct invocation via FastLog::logMsg
     ASSERT_NO_THROW(FastLog::getInstance().logMsg(Severity::INFO,
@@ -182,7 +181,6 @@ TEST(FastLogTest, test_concurrent_multithreaded_logging)
                     case 1: LOG_INFO("Thread " + std::to_string(t) + " info " + std::to_string(i)); break;
                     case 2: LOG_WARNING("Thread " + std::to_string(t) + " warn " + std::to_string(i)); break;
                     case 3: LOG_CRITICAL("Thread " + std::to_string(t) + " crit " + std::to_string(i)); break;
-                        // case 4: LOG_FATAL("Thread " + std::to_string(t) + " fatal " + std::to_string(i)); break;
                 }
             }
             completedThreads.fetch_add(1);
@@ -269,10 +267,10 @@ TEST(FastLogTest, test_performance_throughput)
                         / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
     double avgLatencyMicros = (elapsedSeconds * 1e6) / static_cast<double>(benchmarkLogs);
 
-    std::cout << "\n      -> Enqueued " << benchmarkLogs << " logs in " << std::fixed
+    std::cout << "\n   -> Enqueued " << benchmarkLogs << " logs in " << std::fixed
               << std::setprecision(4) << elapsedSeconds << " s " << "(" << std::fixed
               << std::setprecision(0) << throughput << " msgs/sec, " << std::fixed
-              << std::setprecision(2) << avgLatencyMicros << " us/msg avg latency) ... ";
+              << std::setprecision(2) << avgLatencyMicros << " us/msg avg latency) ...\n\n";
 
     // Performance validations:
     // 1. All 20,000 logs must be enqueued across threads in under 5.0 seconds
@@ -340,10 +338,10 @@ TEST(FastLogTest, test_file_write_throughput)
     double writeThroughput = static_cast<double>(actualLogsWritten) / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
     double avgLatencyMicros = (elapsedSeconds * 1e6) / static_cast<double>(actualLogsWritten);
 
-    std::cout << "\n      -> Wrote " << actualLogsWritten << " logs to file in "
-              << std::fixed << std::setprecision(4) << elapsedSeconds << " s "
-              << "(" << std::fixed << std::setprecision(0) << writeThroughput << " logs/sec, "
-              << std::fixed << std::setprecision(2) << avgLatencyMicros << " us/log avg write latency) ... ";
+    std::cout << "\n   -> Wrote " << actualLogsWritten << " logs to file in " << std::fixed
+              << std::setprecision(4) << elapsedSeconds << " s " << "(" << std::fixed
+              << std::setprecision(0) << writeThroughput << " logs/sec, " << std::fixed
+              << std::setprecision(2) << avgLatencyMicros << " us/log avg write latency) ...\n\n";
 
     // Performance assertions against baseline:
     // Baseline: Disk write throughput must exceed 500 logs/second (or under 2000 us/log)
