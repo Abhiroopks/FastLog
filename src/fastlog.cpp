@@ -1,7 +1,6 @@
 #include "fastlog.h"
 #include <chrono>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 
 // Constructor for LogMsg struct.

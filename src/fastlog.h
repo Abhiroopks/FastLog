@@ -4,8 +4,6 @@
 #include "FastLog_global.h"
 #include <array>
 #include <atomic>
-// #include <blockingconcurrentqueue.h>
-// #include <concurrentqueue.h>
 #include <fstream>
 #include <lfrb.hpp>
 #include <string>
@@ -30,7 +28,13 @@ const std::array<std::string, static_cast<size_t>(Severity::COUNT)> sev_map = {
 #define LOG_CRITICAL(MSG) \
     FastLog::getInstance().logMsg(Severity::CRITICAL, std::move(MSG), std::move(__FILE__), __LINE__)
 #define LOG_FATAL(MSG) \
-    FastLog::getInstance().logMsg(Severity::FATAL, std::move(MSG), std::move(__FILE__), __LINE__)
+    { \
+        FastLog::getInstance().logMsg(Severity::FATAL, \
+                                      std::move(MSG), \
+                                      std::move(__FILE__), \
+                                      __LINE__); \
+        exit(-1); \
+    }
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
 const unsigned int DEFAULT_LOG_QUEUE_SIZE = (1 << 20);
