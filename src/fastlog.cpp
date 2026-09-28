@@ -23,7 +23,9 @@ LogMsg::LogMsg(const Severity level,
  */
 FastLog::FastLog()
     : finished(false)
+#ifdef TESTING
     , logCount(0)
+#endif
     , messages(LOG_QUEUE_SIZE)
 {
     outputFile = new std::ofstream(FILE_NAME, std::ofstream::out);
@@ -157,7 +159,10 @@ void FastLog::flushBuffer()
         return;
     }
     *outputFile << writeBuffer;
+
+#ifdef TESTING
     logCount.fetch_add(bufferMsgCount);
+#endif
     bufferMsgCount = 0;
     writeBuffer.clear();
 }
@@ -168,10 +173,12 @@ void FastLog::flush()
     logMsg(Severity::DEBUG, std::move(""), std::move(""), -1);
 }
 
+#ifdef TESTING
 int FastLog::getLogCount()
 {
     return logCount.load();
 }
+#endif
 
 std::string FastLog::FILE_NAME = "";
 bool FastLog::STD_OUT = false;

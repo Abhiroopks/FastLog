@@ -31,6 +31,7 @@ jobs:
         run: >
           cmake -B ${{ github.workspace }}/build
           -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=ON
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
           -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }}
 
