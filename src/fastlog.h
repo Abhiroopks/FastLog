@@ -73,8 +73,9 @@ public:
                 std::string &&source,
                 const unsigned int line);
 
+#ifdef TESTING
     int getLogCount();
-
+#endif
     void flush();
 
 private:
@@ -89,7 +90,10 @@ private:
     std::atomic<bool> finished;
     LockFreeRingBuffer<LogMsg> messages;
     std::ofstream *outputFile;
+
+#ifdef TESTING
     std::atomic<int> logCount;
+#endif
     unsigned int bufferMsgCount;
     std::string writeBuffer;
 

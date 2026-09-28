@@ -201,8 +201,8 @@ PRETTY_NAME="Linux Mint 22.3"
 
 Benchmarked on the hardware described above.
 
-| Test | Throughput | Avg Latency | Total Time |
-|------|-----------|-------------|------------|
-| Enqueue throughput | 629,078 msgs/sec | 1.59 µs/msg | 32.13 ms |
-| File write throughput | 577,079 logs/sec | 1.73 µs/log | 29.59 ms |
+| Test | Throughput |
+|------|-----------|
+| Enqueue throughput | 814,971 msgs/sec |
+| File write throughput | 676,941 logs/sec |
 
