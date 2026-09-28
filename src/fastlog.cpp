@@ -5,9 +5,9 @@
 
 // Constructor for LogMsg struct.
 LogMsg::LogMsg(const Severity level,
-               std::string msg,
-               std::string source,
-               std::string timestamp,
+               std::string &&msg,
+               std::string &&source,
+               std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
                const unsigned int line)
     : level(level)
     , msg(msg)
@@ -90,14 +90,18 @@ void FastLog::initialize(std::string fileName,
 }
 
 // used to log messages to stdout / file
-void FastLog::logMsg(Severity level, std::string msg, std::string source, const unsigned int line)
+void FastLog::logMsg(Severity level,
+                     std::string &&msg,
+                     std::string &&source,
+                     const unsigned int line)
 {
     if (finished.load()) {
         std::cout << "Attempting to log a message after logger deleted.";
         return;
     }
 
-    messages.push(LogMsg(level, std::move(msg), std::move(source), FastLog::getTimestamp(), line));
+    auto timePoint = std::chrono::current_zone()->to_local(std::chrono::system_clock::now());
+    messages.push(LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
 }
 
 void FastLog::writeLoop()
@@ -135,20 +139,15 @@ void FastLog::writeLoop()
             std::cout << logMsg.msg << std::endl;
         }
 
-        writeBuffer.append("{\"timestamp\":\"" + logMsg.timestamp + "\",\"level\":\""
-                           + sev_map[static_cast<size_t>(logMsg.level)] + "\",\"source\":\""
-                           + logMsg.source + "\",\"line\":" + std::to_string(logMsg.line)
-                           + ",\"msg\":\"" + logMsg.msg + "\"}\n");
+        writeBuffer.append("{\"timestamp\":\""
+                           + std::format("{:%d-%m-%Y %H:%M:%S}", logMsg.timestamp)
+                           + "\",\"level\":\"" + sev_map[static_cast<size_t>(logMsg.level)]
+                           + "\",\"source\":\"" + logMsg.source + "\",\"line\":"
+                           + std::to_string(logMsg.line) + ",\"msg\":\"" + logMsg.msg + "\"}\n");
 
         bufferMsgCount++;
 
     }
-}
-
-std::string FastLog::getTimestamp()
-{
-    auto local = std::chrono::current_zone()->to_local(std::chrono::system_clock::now());
-    return std::format("{:%d-%m-%Y %H:%M:%S}", local);
 }
 
 void FastLog::flushBuffer()

@@ -4,6 +4,7 @@
 #include "FastLog_global.h"
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <fstream>
 #include <lfrb.hpp>
 #include <string>
@@ -45,14 +46,14 @@ struct LogMsg
     Severity level;
     std::string msg;
     std::string source;
-    std::string timestamp;
+    std::chrono::local_time<std::chrono::system_clock::duration> timestamp;
     unsigned int line;
 
     LogMsg() = default;
     LogMsg(const Severity level,
-           std::string msg,
-           std::string source,
-           std::string timestamp,
+           std::string &&msg,
+           std::string &&source,
+           std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
            const unsigned int line);
 };
 
@@ -67,7 +68,10 @@ public:
                            unsigned queueSize = DEFAULT_LOG_QUEUE_SIZE);
 
     // used to log messages to stdout / file
-    void logMsg(const Severity level, std::string msg, std::string source, const unsigned int line);
+    void logMsg(const Severity level,
+                std::string &&msg,
+                std::string &&source,
+                const unsigned int line);
 
     int getLogCount();
 
@@ -79,7 +83,6 @@ private:
     FastLog();
     ~FastLog();
     void writeLoop();
-    std::string getTimestamp();
     void flushBuffer();
 
     std::thread writer;
