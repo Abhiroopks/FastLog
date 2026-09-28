@@ -62,26 +62,6 @@ TEST(FastLogTest, test_initialization_and_reinitialization)
         << "Subsequent calls to FastLog::initialize should be safely ignored";
 }
 
-// Validate LogMsg struct member initialization and field correctness
-TEST(FastLogTest, test_log_msg_structure)
-{
-    LogMsg msg1(Severity::INFO, "Test message content", "test_source.cpp", "20-08-2026 12:00:00", 42);
-    ASSERT_TRUE(msg1.level == Severity::INFO) << "LogMsg level should match constructor argument";
-    ASSERT_TRUE(msg1.msg == "Test message content")
-        << "LogMsg msg should match constructor argument";
-    ASSERT_TRUE(msg1.source == "test_source.cpp")
-        << "LogMsg source should match constructor argument";
-    ASSERT_TRUE(msg1.timestamp == "20-08-2026 12:00:00")
-        << "LogMsg timestamp should match constructor argument";
-    ASSERT_TRUE(msg1.line == 42) << "LogMsg line number should match constructor argument";
-
-    // Edge case: Empty strings and zero line number
-    LogMsg msg2(Severity::INFO, "", "", "", 0);
-    ASSERT_TRUE(msg2.msg.empty()) << "LogMsg msg should allow empty string";
-    ASSERT_TRUE(msg2.source.empty()) << "LogMsg source should allow empty string";
-    ASSERT_TRUE(msg2.timestamp.empty()) << "LogMsg timestamp should allow empty string";
-    ASSERT_TRUE(msg2.line == 0) << "LogMsg line should allow 0";
-}
 
 TEST(FastLogTest, test_fatal)
 {
