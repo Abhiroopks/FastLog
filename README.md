@@ -9,6 +9,7 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 - **Asynchronous & Non-Blocking**: Log messages are queued and dispatched by a dedicated background worker thread.
 - **Thread-Safe**: Multiple threads can safely log concurrently without data races or lock contention on I/O.
 - **Structured JSONL Output**: Logs are formatted into clean JSONL records for easy parsing and log analysis.
+- **Automatic Log Rotation**: Automatically rolls over to a new log file once a configurable file size threshold (default 16 MB) is reached, using sequential numbering (`<name>-0.log`, `<name>-1.log`, etc.).
 - **Convenient Logging Macros**: Automatically captures source file name, line number, log level, and timestamp.
 - **Dual Output Support**: Logs to a specified file and optionally mirrors output to standard output (`stdout`).
 
@@ -79,6 +80,7 @@ target_link_libraries(my_app PRIVATE FastLogLib)
 int main()
 {
     // 1. Initialize FastLog with the target file path and stdout logging flag
+    // Logs are written to app-0.log and rotated when the file size threshold is reached
     const std::string logFilePath = "app.log";
     const bool enableStdout = true;
     FastLog::initialize(logFilePath, enableStdout);
@@ -127,21 +129,60 @@ int main()
 }
 ```
 
+### 3. Log Rotation & Buffer Configuration Example
+
+You can configure the in-memory write buffer, queue capacity, and log rotation size threshold:
+
+```cpp
+#include "fastlog.h"
+
+int main()
+{
+    const std::string logFilePath = "app.log";
+    const bool enableStdout = false;
+    const unsigned int bufferSize = 32 * 1024;         // 32 KB write buffer
+    const unsigned int queueSize = 500000;             // 500k messages in queue
+    const unsigned int maxFileSize = 10 * 1024 * 1024; // 10 MB per file before rotating
+
+    FastLog::initialize(logFilePath, enableStdout, bufferSize, queueSize, maxFileSize);
+
+    LOG_INFO("Logging with custom buffer and rotation settings");
+
+    return 0;
+}
+```
+
+---
+
+## Log Rotation
+
+FastLog automatically splits log output across sequentially numbered files to prevent log files from growing unboundedly:
+
+- **Sequential Numbering**: When initialized with a file name such as `"app.log"`, FastLog extracts the base name and extension to format filenames as `<base>-<index>.<ext>` (e.g., `app-0.log`, `app-1.log`, `app-2.log`, etc.).
+- **Rotation Threshold**: FastLog tracks the cumulative byte size written to the active log file during buffer flushes. Whenever the file size reaches or exceeds `logFileMaxSize` (default 16 MB), the current file is closed, the sequence counter is incremented, and a new log file is opened.
+- **Asynchronous Execution**: Log rotation occurs transparently on the background worker thread during write flushes without blocking threads that invoke logging macros.
+
 ---
 
 ## API Reference
 
 ### Initialization & Singleton
 
-- `void FastLog::initialize(std::string fileName, bool stdOut)`
+- `void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferSize = DEFAULT_BUFFER_SIZE, unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE, unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE)`
   - Initializes the logger. Must be called once before any logging macros are invoked.
-  - `fileName`: File path where the JSON log output will be written.
+  - `fileName`: Target base file path where logs will be written. FastLog appends a sequential index to the base filename (e.g., `"app.log"` produces `app-0.log`, `app-1.log`, etc.).
   - `stdOut`: When set to `true`, messages are printed to `std::cout` in addition to the file.
+  - `bufferSize`: Size (in bytes) of the in-memory write buffer before flushing to disk. Defaults to 16 KB (`DEFAULT_BUFFER_SIZE = 1 << 14`).
+  - `queueSize`: Maximum capacity (number of log messages) of the lock-free ring buffer. Defaults to 1,048,576 messages (`DEFAULT_LOG_QUEUE_SIZE = 1 << 20`).
+  - `logFileMaxSize`: Maximum size (in bytes) of a log file on disk before rotating to a new indexed file. Defaults to 16 MB (`DEFAULT_LOG_FILE_SIZE = 1 << 24`).
 
 - `FastLog &FastLog::getInstance()`
   - Returns the singleton instance of `FastLog`. Throws `std::runtime_error` if called before `FastLog::initialize()`.
 
-- `int FastLog::getLogCount()`
+- `void FastLog::flush()`
+  - Enqueues a flush request to immediately flush buffered log messages to disk.
+
+- `unsigned int FastLog::getLogCount()` *(Available when compiled with `BUILD_TESTING=ON`)*
   - Returns the total number of log entries written and flushed to the destination log file. Thread-safe (atomic access).
 
 ### Logging Macros

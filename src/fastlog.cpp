@@ -18,17 +18,22 @@ LogMsg::LogMsg(const Severity level,
 
 /**
  * @brief FastLog::FastLog Private constructor
- * @param fileName the path to file where logs will be saved.
- * @param stdOut whether or not messages should be printed to stdout.
  */
 FastLog::FastLog()
     : finished(false)
 #ifdef TESTING
     , logCount(0)
+    , bufferMsgCount(0)
 #endif
     , messages(LOG_QUEUE_SIZE)
+    , logSize(0)
+    , logNum(0)
 {
-    outputFile = new std::ofstream(FILE_NAME, std::ofstream::out);
+    int dotIdx = FILE_NAME.find('.');
+    fileBaseName = FILE_NAME.substr(0, dotIdx);
+    fileExt = FILE_NAME.substr(dotIdx + 1);
+    outputFile = new std::ofstream(fileBaseName + '-' + std::to_string(logNum) + '.' + fileExt,
+                                   std::ofstream::out);
     if (!outputFile->is_open()) {
         std::cout << "Failed to open log file for writing in constructor" << std::endl;
         return;
@@ -72,11 +77,13 @@ FastLog &FastLog::getInstance()
  * @param stdOut whether or not messages should be printed to stdout.
  * @param bufferSize the max size, in bytes, of the writeBuffer. Defaults to 16 KB.
  * @param queueSize the max size, in number of log messages, of the queue of log msgs. Defaults to 2^20 ~ 1 million.
+ * @param logFileMaxSize the max size, in bytes, of the log file on disk, before rotating to a new one. Defaults to 16 MB.
  */
 void FastLog::initialize(std::string fileName,
                          bool stdOut,
                          unsigned int bufferSize,
-                         unsigned int queueSize)
+                         unsigned int queueSize,
+                         unsigned int logFileMaxSize)
 {
     if (initialized) {
         std::cout << "already initialized FastLog" << std::endl;
@@ -87,6 +94,7 @@ void FastLog::initialize(std::string fileName,
     STD_OUT = stdOut;
     BUFFER_SIZE = bufferSize;
     LOG_QUEUE_SIZE = queueSize;
+    LOG_FILE_MAX_SIZE = logFileMaxSize;
 
     initialized = true;
 }
@@ -147,8 +155,9 @@ void FastLog::writeLoop()
                            + "\",\"source\":\"" + logMsg.source + "\",\"line\":"
                            + std::to_string(logMsg.line) + ",\"msg\":\"" + logMsg.msg + "\"}\n");
 
+#ifdef TESTING
         bufferMsgCount++;
-
+#endif
     }
 }
 
@@ -159,22 +168,34 @@ void FastLog::flushBuffer()
         return;
     }
     *outputFile << writeBuffer;
+    logSize += writeBuffer.size();
+    writeBuffer.clear();
+
+    // rotate log file if needed
+    if (logSize >= LOG_FILE_MAX_SIZE) {
+        outputFile->close();
+        delete outputFile;
+        logNum++;
+        logSize = 0;
+
+        outputFile = new std::ofstream(fileBaseName + '-' + std::to_string(logNum) + '.' + fileExt,
+                                       std::ofstream::out);
+    }
 
 #ifdef TESTING
     logCount.fetch_add(bufferMsgCount);
-#endif
     bufferMsgCount = 0;
-    writeBuffer.clear();
+#endif
 }
 
 void FastLog::flush()
 {
-    // use a special LogMsg to force a flush to disk.
+    // use a special (line # is -1) LogMsg to force a flush to disk.
     logMsg(Severity::DEBUG, std::move(""), std::move(""), -1);
 }
 
 #ifdef TESTING
-int FastLog::getLogCount()
+unsigned int FastLog::getLogCount()
 {
     return logCount.load();
 }
@@ -185,3 +206,4 @@ bool FastLog::STD_OUT = false;
 bool FastLog::initialized = false;
 unsigned int FastLog::BUFFER_SIZE = 0;
 unsigned int FastLog::LOG_QUEUE_SIZE = 0;
+unsigned int FastLog::LOG_FILE_MAX_SIZE = 0;
