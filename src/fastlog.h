@@ -39,6 +39,7 @@ const std::array<std::string, static_cast<size_t>(Severity::COUNT)> sev_map = {
 
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
 const unsigned int DEFAULT_LOG_QUEUE_SIZE = (1 << 20);
+const unsigned int DEFAULT_LOG_FILE_SIZE = (1 << 24);
 
 // Struct to encapsulate all info for a single log message.
 struct LogMsg
@@ -65,7 +66,8 @@ public:
     static void initialize(std::string fileName,
                            bool stdOut,
                            unsigned int bufferSize = DEFAULT_BUFFER_SIZE,
-                           unsigned queueSize = DEFAULT_LOG_QUEUE_SIZE);
+                           unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE,
+                           unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE);
 
     // used to log messages to stdout / file
     void logMsg(const Severity level,
@@ -74,7 +76,7 @@ public:
                 const unsigned int line);
 
 #ifdef TESTING
-    int getLogCount();
+    unsigned int getLogCount();
 #endif
     void flush();
 
@@ -90,11 +92,15 @@ private:
     std::atomic<bool> finished;
     LockFreeRingBuffer<LogMsg> messages;
     std::ofstream *outputFile;
+    std::string fileBaseName;
+    std::string fileExt;
+    unsigned int logSize;
+    unsigned int logNum;
 
 #ifdef TESTING
     std::atomic<int> logCount;
-#endif
     unsigned int bufferMsgCount;
+#endif
     std::string writeBuffer;
 
     static bool initialized;
@@ -102,6 +108,7 @@ private:
     static bool STD_OUT;
     static unsigned int BUFFER_SIZE;
     static unsigned int LOG_QUEUE_SIZE;
+    static unsigned int LOG_FILE_MAX_SIZE;
 };
 
 #endif // FASTLOG_H

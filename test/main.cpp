@@ -2,14 +2,18 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <iomanip>
 #include <iostream>
+#include <optional>
+#include <regex>
 #include <string>
 #include <thread>
 #include <vector>
 
-const std::string LOG_FILE_NAME = "test_output.log";
+const std::string LOG_FILE_EXTENSION = ".log";
+const std::string LOG_FILE_BASE_NAME = "test_output";
 const bool ENABLE_STDOUT = false;
 
 // Helper to wait until FastLog writes a specific target number of logs to file
@@ -53,7 +57,7 @@ TEST(FastLogTest, test_uninitialized_access)
 // Validate initialization and idempotency of subsequent initialize() calls
 TEST(FastLogTest, test_initialization_and_reinitialization)
 {
-    ASSERT_NO_THROW(FastLog::initialize(LOG_FILE_NAME, ENABLE_STDOUT))
+    ASSERT_NO_THROW(FastLog::initialize(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT))
         << "FastLog::initialize should succeed without throwing";
     ASSERT_NO_THROW(FastLog::getInstance())
         << "FastLog::getInstance() should succeed after initialization";
@@ -329,4 +333,57 @@ TEST(FastLogTest, test_file_write_throughput)
         << "File write throughput was below baseline of 500 logs/sec";
     // Maximum allowable time: all 5000 logs written in under 10 seconds
     ASSERT_TRUE(elapsedSeconds < 10.0) << "File writing took longer than the 10.0 second threshold";
+}
+
+std::optional<unsigned int> maxLogNumber(const std::string &baseName)
+{
+    // Get the curr dir
+    std::filesystem::path dir = std::filesystem::current_path();
+
+    // std::regex pattern(
+    //     R"(" + baseName + R"-(\d+)\.log"")
+    // );
+    std::string pattern = baseName + R"(-(\d+)\.log)";
+    std::regex re(pattern);
+
+    long maxNum = -1;
+
+    for (const auto &entry : std::filesystem::directory_iterator(dir)) {
+        if (!entry.is_regular_file())
+            continue;
+
+        std::string filename = entry.path().filename().string();
+
+        std::smatch match;
+        if (std::regex_match(filename, match, re)) {
+            long num = std::stol(match[1].str());
+            if (num > maxNum)
+                maxNum = num;
+        }
+    }
+
+    return maxNum >= 0 ? std::optional<long>(maxNum) : std::nullopt;
+}
+
+// Ensure a new log file is created once the set max size is reached.
+TEST(FastLogTest, test_file_rotation)
+{
+    std::optional<unsigned int> maxLogNumBefore = maxLogNumber(LOG_FILE_BASE_NAME);
+
+    ASSERT_TRUE(maxLogNumBefore != std::nullopt);
+
+    // this msg size should be enough to force a file rotation.
+    unsigned int msgSize = (1 << 23);
+    LOG_INFO(std::string(msgSize, 'a'));
+
+    // The next log msg should go into a new file.
+    LOG_INFO("new file");
+    FastLog::getInstance().flush();
+
+    // sleep for some time to allow background thread to process.
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::optional<unsigned int> maxLogNumAfter = maxLogNumber(LOG_FILE_BASE_NAME);
+    ASSERT_TRUE(maxLogNumAfter != std::nullopt);
+
+    ASSERT_TRUE(maxLogNumAfter > maxLogNumBefore);
 }
