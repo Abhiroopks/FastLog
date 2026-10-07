@@ -5,13 +5,13 @@
 
 // Constructor for LogMsg struct.
 LogMsg::LogMsg(const Severity level,
-               std::string &&msg,
-               std::string &&source,
+               std::string &&_msg,
+               std::string &&_source,
                std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
                const unsigned int line)
     : level(level)
-    , msg(std::move(msg))
-    , source(std::move(source))
+    , msg(std::move(_msg))
+    , source(std::move(_source))
     , timestamp(timestamp)
     , line(line)
 {}
@@ -24,8 +24,7 @@ FastLog::FastLog(std::string fileName,
                  unsigned int bufferSize,
                  unsigned int queueSize,
                  unsigned int logFileMaxSize,
-                 bool blocking,
-                 std::chrono::microseconds blockingTime)
+                 bool blocking)
     : finished(false)
     , messages(queueSize)
     , outputFile(nullptr)
@@ -35,7 +34,6 @@ FastLog::FastLog(std::string fileName,
     , logQueueSize(queueSize)
     , logFileMaxSize(logFileMaxSize)
     , blocking(blocking)
-    , blockingTime(blockingTime)
     , logSize(0)
     , logNum(0)
 #ifdef TESTING
@@ -98,11 +96,13 @@ void FastLog::logMsg(const Severity level,
         messages.push(LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
     } else {
         bool succ = false;
+        std::chrono::microseconds blockingTime = DEFAULT_BLOCKING_TIME;
         while (!succ) {
             succ = messages.push(
                 LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
 
             std::this_thread::sleep_for(blockingTime);
+            blockingTime *= 2;
         }
     }
 }

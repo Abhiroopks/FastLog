@@ -38,8 +38,8 @@ struct LogMsg
 
     LogMsg() = default;
     LogMsg(const Severity level,
-           std::string &&msg,
-           std::string &&source,
+           std::string &&_msg,
+           std::string &&_source,
            std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
            const unsigned int line);
 };
@@ -52,8 +52,7 @@ public:
             unsigned int bufferSize = DEFAULT_BUFFER_SIZE,
             unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE,
             unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE,
-            bool blocking = false,
-            std::chrono::microseconds blockingTime = DEFAULT_BLOCKING_TIME);
+            bool blocking = false);
 
     ~FastLog();
 
@@ -176,7 +175,6 @@ private:
     unsigned int logQueueSize;
     unsigned int logFileMaxSize;
     bool blocking;
-    std::chrono::microseconds blockingTime;
     unsigned int logSize;
     unsigned int logNum;
 
