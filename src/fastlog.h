@@ -5,7 +5,6 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <format>
 #include <fstream>
 #include <lfrb.hpp>
 #include <source_location>
@@ -177,6 +176,7 @@ private:
     bool blocking;
     unsigned int logSize;
     unsigned int logNum;
+    const std::chrono::time_zone *timeZone;
 
 #ifdef TESTING
     std::atomic<int> logCount;

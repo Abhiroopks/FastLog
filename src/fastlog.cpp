@@ -36,6 +36,7 @@ FastLog::FastLog(std::string fileName,
     , blocking(blocking)
     , logSize(0)
     , logNum(0)
+    , timeZone(std::chrono::current_zone())
 #ifdef TESTING
     , logCount(0)
     , bufferMsgCount(0)
@@ -90,7 +91,7 @@ void FastLog::logMsg(const Severity level,
         return;
     }
 
-    auto timePoint = std::chrono::current_zone()->to_local(std::chrono::system_clock::now());
+    auto timePoint = timeZone->to_local(std::chrono::system_clock::now());
 
     if (!blocking) {
         messages.push(LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
