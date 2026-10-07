@@ -25,7 +25,7 @@ const std::array<std::string, static_cast<size_t>(Severity::COUNT)> sev_map = {
 const unsigned int DEFAULT_BUFFER_SIZE = (1 << 14);
 const unsigned int DEFAULT_LOG_QUEUE_SIZE = (1 << 20);
 const unsigned int DEFAULT_LOG_FILE_SIZE = (1 << 24);
-const std::chrono::microseconds DEFAULT_BLOCKING_TIME = std::chrono::microseconds(10);
+const std::chrono::nanoseconds DEFAULT_BLOCKING_TIME = std::chrono::nanoseconds(1);
 
 // Struct to encapsulate all info for a single log message.
 struct LogMsg

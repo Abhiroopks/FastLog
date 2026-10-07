@@ -406,3 +406,29 @@ TEST(FastLogTest, test_file_rotation)
 
     ASSERT_TRUE(maxLogNumAfter > maxLogNumBefore);
 }
+
+// Ensure blocking behavior takes a minimum amount of time to complete
+// in the case of a full queue.
+TEST(FastLogTest, test_blocking)
+{
+    // set queue size to 1, which is VERY SMALL.
+    unsigned int logQueueSize = 1;
+    unsigned int numMessages = 10;
+
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION,
+                   ENABLE_STDOUT,
+                   DEFAULT_BUFFER_SIZE,
+                   logQueueSize,
+                   DEFAULT_LOG_FILE_SIZE,
+                   true);
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for (auto i = 0; i < numMessages; i++) {
+        logger.info("test blocking");
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::cout << "\n   -> Enqueuing " << numMessages << " msgs with queue size == " << logQueueSize << " took "
+              << std::chrono::duration_cast<std::chrono::microseconds>(end - start) << "\n\n";
+    ASSERT_TRUE((end - start) >= DEFAULT_BLOCKING_TIME);
+}

@@ -96,7 +96,7 @@ void FastLog::logMsg(const Severity level,
         messages.push(LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
     } else {
         bool succ = false;
-        std::chrono::microseconds blockingTime = DEFAULT_BLOCKING_TIME;
+        std::chrono::nanoseconds blockingTime = DEFAULT_BLOCKING_TIME;
         while (!succ) {
             succ = messages.push(
                 LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
