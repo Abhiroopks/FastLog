@@ -10,7 +10,7 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 - **Thread-Safe**: Multiple threads can safely log concurrently without data races or lock contention on I/O.
 - **Structured JSONL Output**: Logs are formatted into clean JSONL records for easy parsing and log analysis.
 - **Automatic Log Rotation**: Automatically rolls over to a new log file once a configurable file size threshold (default 16 MB) is reached, using sequential numbering (`<name>-0.log`, `<name>-1.log`, etc.).
-- **Convenient Logging Macros**: Automatically captures source file name, line number, log level, and timestamp.
+- **Automatic Source Location Capture**: Automatically captures source file name, line number, log level, and timestamp using C++20 `std::source_location`.
 - **Dual Output Support**: Logs to a specified file and optionally mirrors output to standard output (`stdout`).
 
 ---
@@ -79,18 +79,18 @@ target_link_libraries(my_app PRIVATE FastLogLib)
 
 int main()
 {
-    // 1. Initialize FastLog with the target file path and stdout logging flag
+    // 1. Instantiate FastLog with the target file path and stdout logging flag
     // Logs are written to app-0.log and rotated when the file size threshold is reached
     const std::string logFilePath = "app.log";
     const bool enableStdout = true;
-    FastLog::initialize(logFilePath, enableStdout);
+    FastLog logger(logFilePath, enableStdout);
 
-    // 2. Use the logging macros throughout your application
-    LOG_INFO("Application initialized successfully");
-    LOG_DEBUG("Loading configuration parameters");
-    LOG_WARNING("Disk space is below 20%");
-    LOG_CRITICAL("Database connection dropped, attempting reconnect");
-    LOG_FATAL("Unable to restore service, shutting down");
+    // 2. Use the logging methods on the instance
+    logger.info("Application initialized successfully");
+    logger.debug("Loading configuration parameters");
+    logger.warning("Disk space is below 20%");
+    logger.critical("Database connection dropped, attempting reconnect");
+    // logger.fatal("Unable to restore service, shutting down"); // Note: terminates process
 
     return 0;
 }
@@ -105,20 +105,20 @@ FastLog is designed to handle high-throughput logging across concurrent threads:
 #include <thread>
 #include <vector>
 
-void workerTask(int workerId)
+void workerTask(FastLog &logger, int workerId)
 {
-    LOG_INFO("Worker " + std::to_string(workerId) + " starting task");
+    logger.info("Worker " + std::to_string(workerId) + " starting task");
     // Perform work...
-    LOG_INFO("Worker " + std::to_string(workerId) + " finished task");
+    logger.info("Worker " + std::to_string(workerId) + " finished task");
 }
 
 int main()
 {
-    FastLog::initialize("multithread.log", false);
+    FastLog logger("multithread.log", false);
 
     std::vector<std::thread> workers;
     for (int i = 0; i < 8; ++i) {
-        workers.emplace_back(workerTask, i);
+        workers.emplace_back(workerTask, std::ref(logger), i);
     }
 
     for (auto &t : workers) {
@@ -131,7 +131,7 @@ int main()
 
 ### 3. Log Rotation & Buffer Configuration Example
 
-You can configure the in-memory write buffer, queue capacity, and log rotation size threshold:
+You can configure the in-memory write buffer, queue capacity, log rotation size threshold, and blocking behavior:
 
 ```cpp
 #include "fastlog.h"
@@ -144,9 +144,9 @@ int main()
     const unsigned int queueSize = 500000;             // 500k messages in queue
     const unsigned int maxFileSize = 10 * 1024 * 1024; // 10 MB per file before rotating
 
-    FastLog::initialize(logFilePath, enableStdout, bufferSize, queueSize, maxFileSize);
+    FastLog logger(logFilePath, enableStdout, bufferSize, queueSize, maxFileSize);
 
-    LOG_INFO("Logging with custom buffer and rotation settings");
+    logger.info("Logging with custom buffer and rotation settings");
 
     return 0;
 }
@@ -160,42 +160,62 @@ FastLog automatically splits log output across sequentially numbered files to pr
 
 - **Sequential Numbering**: When initialized with a file name such as `"app.log"`, FastLog extracts the base name and extension to format filenames as `<base>-<index>.<ext>` (e.g., `app-0.log`, `app-1.log`, `app-2.log`, etc.).
 - **Rotation Threshold**: FastLog tracks the cumulative byte size written to the active log file during buffer flushes. Whenever the file size reaches or exceeds `logFileMaxSize` (default 16 MB), the current file is closed, the sequence counter is incremented, and a new log file is opened.
-- **Asynchronous Execution**: Log rotation occurs transparently on the background worker thread during write flushes without blocking threads that invoke logging macros.
+- **Asynchronous Execution**: Log rotation occurs transparently on the background worker thread during write flushes without blocking worker threads calling logging methods.
 
 ---
 
 ## API Reference
 
-### Initialization & Singleton
+### Constructor & Lifecycle
 
-- `void FastLog::initialize(std::string fileName, bool stdOut, unsigned int bufferSize = DEFAULT_BUFFER_SIZE, unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE, unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE)`
-  - Initializes the logger. Must be called once before any logging macros are invoked.
+- `FastLog(std::string fileName, bool stdOut = false, unsigned int bufferSize = DEFAULT_BUFFER_SIZE, unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE, unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE, bool blocking = false, std::chrono::microseconds blockingTime = DEFAULT_BLOCKING_TIME)`
+  - Constructs and initializes a `FastLog` instance, starting the background writer thread.
   - `fileName`: Target base file path where logs will be written. FastLog appends a sequential index to the base filename (e.g., `"app.log"` produces `app-0.log`, `app-1.log`, etc.).
-  - `stdOut`: When set to `true`, messages are printed to `std::cout` in addition to the file.
+  - `stdOut`: When set to `true`, messages are printed to `std::cout` in addition to the file. Defaults to `false`.
   - `bufferSize`: Size (in bytes) of the in-memory write buffer before flushing to disk. Defaults to 16 KB (`DEFAULT_BUFFER_SIZE = 1 << 14`).
   - `queueSize`: Maximum capacity (number of log messages) of the lock-free ring buffer. Defaults to 1,048,576 messages (`DEFAULT_LOG_QUEUE_SIZE = 1 << 20`).
   - `logFileMaxSize`: Maximum size (in bytes) of a log file on disk before rotating to a new indexed file. Defaults to 16 MB (`DEFAULT_LOG_FILE_SIZE = 1 << 24`).
+  - `blocking`: When set to `true`, pushing to a full queue will retry instead of dropping messages. Defaults to `false`.
+  - `blockingTime`: Microseconds to sleep between push retries when `blocking` is `true`. Defaults to 10 microseconds (`DEFAULT_BLOCKING_TIME`).
 
-- `FastLog &FastLog::getInstance()`
-  - Returns the singleton instance of `FastLog`. Throws `std::runtime_error` if called before `FastLog::initialize()`.
+- `~FastLog()`
+  - Destructor. Signals the background thread to finish, flushes remaining buffers to disk, and closes the output log file. Copy and move constructors and assignment operators are disabled (`= delete`).
 
-- `void FastLog::flush()`
+- `void flush()`
   - Enqueues a flush request to immediately flush buffered log messages to disk.
 
-- `unsigned int FastLog::getLogCount()` *(Available when compiled with `BUILD_TESTING=ON`)*
+- `unsigned int getLogCount()` *(Available when compiled with `BUILD_TESTING=ON` / `TESTING`)*
   - Returns the total number of log entries written and flushed to the destination log file. Thread-safe (atomic access).
 
-### Logging Macros
+### Logging Methods
 
-The following macros automatically capture the source filename (`__FILE__`) and line number (`__LINE__`):
+`FastLog` instances provide public member methods for each severity level. These methods automatically capture the calling source file name and line number using C++20 `std::source_location`:
 
-| Macro | Level | Description |
+| Method | Level | Description |
 | :--- | :--- | :--- |
-| `LOG_DEBUG(MSG)` | `DEBUG` | Fine-grained diagnostic events |
-| `LOG_INFO(MSG)` | `INFO` | Informational messages on application progress |
-| `LOG_WARNING(MSG)` | `WARNING` | Potentially harmful situations |
-| `LOG_CRITICAL(MSG)` | `CRITICAL` | Severe errors that require immediate attention |
-| `LOG_FATAL(MSG)` | `FATAL` | Fatal errors causing premature termination |
+| `void debug(std::string msg, const std::source_location loc = std::source_location::current())` | `DEBUG` | Fine-grained diagnostic events |
+| `void info(std::string msg, const std::source_location loc = std::source_location::current())` | `INFO` | Informational messages on application progress |
+| `void warning(std::string msg, const std::source_location loc = std::source_location::current())` | `WARNING` | Potentially harmful situations |
+| `void critical(std::string msg, const std::source_location loc = std::source_location::current())` | `CRITICAL` | Severe errors that require immediate attention |
+| `[[noreturn]] void fatal(std::string msg, const std::source_location loc = std::source_location::current())` | `FATAL` | Fatal errors causing immediate application termination (`std::exit(-1)`) |
+
+#### Overloads & Aliases
+
+- **Explicit Source & Line Overloads**:
+  All severity methods provide overloads accepting explicit source file and line number:
+  - `void debug(std::string msg, std::string source, const unsigned int line)`
+  - `void info(std::string msg, std::string source, const unsigned int line)`
+  - `void warning(std::string msg, std::string source, const unsigned int line)`
+  - `void critical(std::string msg, std::string source, const unsigned int line)`
+  - `[[noreturn]] void fatal(std::string msg, std::string source, const unsigned int line)`
+
+- **Named Convenience Aliases**:
+  - CamelCase aliases: `logDebug(...)`, `logInfo(...)`, `logWarning(...)`, `logCritical(...)`, `logFatal(...)`
+  - snake_case aliases: `log_debug(...)`, `log_info(...)`, `log_warning(...)`, `log_critical(...)`, `log_fatal(...)`
+
+- **Direct API Logging**:
+  - `void logMsg(const Severity level, std::string msg, std::string source, const unsigned int line)`
+    Enqueues a structured log message directly with explicit severity, message, source, and line number.
 
 ---
 
@@ -204,8 +224,8 @@ The following macros automatically capture the source filename (`__FILE__`) and 
 FastLog writes structured JSON entries to the configured log file:
 
 ```json
-{"timestamp":"23-09-2026 16:22:28","level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing LOG_DEBUG macro execution"}
-{"timestamp":"23-09-2026 16:22:28","level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing LOG_INFO macro execution"}
+{"timestamp":"23-09-2026 16:22:28","level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing debug method execution"}
+{"timestamp":"23-09-2026 16:22:28","level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing info method execution"}
 ```
 
 ---
