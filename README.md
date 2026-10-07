@@ -6,7 +6,7 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 
 ## Features
 
-- **Asynchronous & Non-Blocking**: Log messages are queued and dispatched by a dedicated background worker thread.
+- **Asynchronous & Configurable Blocking**: Log messages are queued and dispatched by a dedicated background worker thread. Supports non-blocking mode (default, low-latency, drops if queue is full) or blocking mode (exponential backoff retry, zero message loss).
 - **Thread-Safe**: Multiple threads can safely log concurrently without data races or lock contention on I/O.
 - **Structured JSONL Output**: Logs are formatted into clean JSONL records for easy parsing and log analysis.
 - **Automatic Log Rotation**: Automatically rolls over to a new log file once a configurable file size threshold (default 16 MB) is reached, using sequential numbering (`<name>-0.log`, `<name>-1.log`, etc.).
@@ -129,7 +129,7 @@ int main()
 }
 ```
 
-### 3. Log Rotation & Buffer Configuration Example
+### 3. Log Rotation, Buffer & Blocking Configuration Example
 
 You can configure the in-memory write buffer, queue capacity, log rotation size threshold, and blocking behavior:
 
@@ -143,10 +143,11 @@ int main()
     const unsigned int bufferSize = 32 * 1024;         // 32 KB write buffer
     const unsigned int queueSize = 500000;             // 500k messages in queue
     const unsigned int maxFileSize = 10 * 1024 * 1024; // 10 MB per file before rotating
+    const bool blocking = true;                        // Enable blocking mode (retry on full queue)
 
-    FastLog logger(logFilePath, enableStdout, bufferSize, queueSize, maxFileSize);
+    FastLog logger(logFilePath, enableStdout, bufferSize, queueSize, maxFileSize, blocking);
 
-    logger.info("Logging with custom buffer and rotation settings");
+    logger.info("Logging with custom buffer, rotation, and blocking settings");
 
     return 0;
 }
@@ -164,19 +165,38 @@ FastLog automatically splits log output across sequentially numbered files to pr
 
 ---
 
+## Queue Overflow Handling (Blocking vs. Non-Blocking)
+
+FastLog enqueues log messages into an internal lock-free ring buffer (`LockFreeRingBuffer`) before the background worker thread writes them to disk. The `blocking` constructor parameter controls how logging methods behave when the ring buffer is full:
+
+- **Non-Blocking Mode (`blocking = false`, default)**:
+  - If the queue is full, logging calls attempt a single push to the ring buffer and immediately return. If the queue cannot accept the item, the message is dropped.
+  - Calling threads are never blocked or stalled, prioritizing minimal latency and high throughput.
+  - Ideal for performance-critical applications where thread latency is paramount and occasional message drops under extreme load are acceptable.
+
+- **Blocking Mode (`blocking = true`)**:
+  - If the queue is full, the calling thread retries pushing the message in a loop using exponential backoff until it succeeds.
+  - The retry loop begins by sleeping for `DEFAULT_BLOCKING_TIME` (1 nanosecond) using `std::this_thread::sleep_for(blockingTime)`.
+  - On each failed attempt, the sleep duration is doubled (`blockingTime *= 2`) before retrying.
+  - Guarantees zero log loss, at the cost of blocking producer threads until the background writer thread drains sufficient space from the queue.
+  - Ideal for applications where complete audit trails and log integrity are required without dropping any events.
+
+---
+
 ## API Reference
 
 ### Constructor & Lifecycle
 
-- `FastLog(std::string fileName, bool stdOut = false, unsigned int bufferSize = DEFAULT_BUFFER_SIZE, unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE, unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE, bool blocking = false, std::chrono::microseconds blockingTime = DEFAULT_BLOCKING_TIME)`
+- `FastLog(std::string fileName, bool stdOut = false, unsigned int bufferSize = DEFAULT_BUFFER_SIZE, unsigned int queueSize = DEFAULT_LOG_QUEUE_SIZE, unsigned int logFileMaxSize = DEFAULT_LOG_FILE_SIZE, bool blocking = false)`
   - Constructs and initializes a `FastLog` instance, starting the background writer thread.
   - `fileName`: Target base file path where logs will be written. FastLog appends a sequential index to the base filename (e.g., `"app.log"` produces `app-0.log`, `app-1.log`, etc.).
   - `stdOut`: When set to `true`, messages are printed to `std::cout` in addition to the file. Defaults to `false`.
   - `bufferSize`: Size (in bytes) of the in-memory write buffer before flushing to disk. Defaults to 16 KB (`DEFAULT_BUFFER_SIZE = 1 << 14`).
   - `queueSize`: Maximum capacity (number of log messages) of the lock-free ring buffer. Defaults to 1,048,576 messages (`DEFAULT_LOG_QUEUE_SIZE = 1 << 20`).
   - `logFileMaxSize`: Maximum size (in bytes) of a log file on disk before rotating to a new indexed file. Defaults to 16 MB (`DEFAULT_LOG_FILE_SIZE = 1 << 24`).
-  - `blocking`: When set to `true`, pushing to a full queue will retry instead of dropping messages. Defaults to `false`.
-  - `blockingTime`: Microseconds to sleep between push retries when `blocking` is `true`. Defaults to 10 microseconds (`DEFAULT_BLOCKING_TIME`).
+  - `blocking`: Controls queue overflow behavior when the lock-free ring buffer is full. Defaults to `false`.
+    - `false` (default): Non-blocking push; drops the message if the queue is full to avoid stalling producer threads.
+    - `true`: Blocking push; retries in a loop with exponential backoff (starting at 1 nanosecond sleep and doubling per retry) until the message is enqueued, ensuring zero message loss.
 
 - `~FastLog()`
   - Destructor. Signals the background thread to finish, flushes remaining buffers to disk, and closes the output log file. Copy and move constructors and assignment operators are disabled (`= delete`).
