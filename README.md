@@ -284,6 +284,6 @@ Benchmarked on the hardware described above.
 
 | Test | Throughput |
 |------|-----------|
-| Enqueue throughput | 814,971 msgs/sec |
-| File write throughput | 676,941 logs/sec |
+| Enqueue throughput | ~2 million msgs/sec |
+| File write throughput | ~1.2 million logs/sec |
 
