@@ -10,6 +10,7 @@
 #include <regex>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 const std::string LOG_FILE_EXTENSION = ".log";
@@ -17,10 +18,10 @@ const std::string LOG_FILE_BASE_NAME = "test_output";
 const bool ENABLE_STDOUT = false;
 
 // Helper to wait until FastLog writes a specific target number of logs to file
-bool wait_for_written_log_count(int targetCount, double timeoutSeconds = 15.0)
+bool wait_for_written_log_count(FastLog &logger, int targetCount, double timeoutSeconds = 15.0)
 {
     auto startWait = std::chrono::high_resolution_clock::now();
-    while (FastLog::getInstance().getLogCount() < targetCount) {
+    while (logger.getLogCount() < targetCount) {
         auto now = std::chrono::high_resolution_clock::now();
         double elapsed = std::chrono::duration<double>(now - startWait).count();
         if (elapsed > timeoutSeconds) {
@@ -32,12 +33,12 @@ bool wait_for_written_log_count(int targetCount, double timeoutSeconds = 15.0)
 }
 
 // waits for logCount in FastLog to stabilize and returns the count.
-int getStableCount()
+int getStableCount(FastLog &logger)
 {
-    int stableCount = FastLog::getInstance().getLogCount();
+    int stableCount = logger.getLogCount();
     while (true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        int current = FastLog::getInstance().getLogCount();
+        int current = logger.getLogCount();
         if (current == stableCount) {
             break;
         }
@@ -47,106 +48,118 @@ int getStableCount()
     return stableCount;
 }
 
-// Validate uninitialized FastLog::getInstance() throws std::runtime_error
+// Validate that FastLog cannot be instantiated without constructor parameters (no uninitialized access)
 TEST(FastLogTest, test_uninitialized_access)
 {
-    ASSERT_THROW(FastLog::getInstance(), std::runtime_error)
-        << "FastLog::getInstance() must throw std::runtime_error when called before initialization";
+    static_assert(!std::is_default_constructible_v<FastLog>,
+                  "FastLog must require constructor arguments and not be default constructible");
+    ASSERT_FALSE(std::is_default_constructible_v<FastLog>);
 }
 
-// Validate initialization and idempotency of subsequent initialize() calls
+// Validate constructor initialization and creation of multiple FastLog instances
 TEST(FastLogTest, test_initialization_and_reinitialization)
 {
-    ASSERT_NO_THROW(FastLog::initialize(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT))
-        << "FastLog::initialize should succeed without throwing";
-    ASSERT_NO_THROW(FastLog::getInstance())
-        << "FastLog::getInstance() should succeed after initialization";
-    // Verify that re-initialization is safely ignored and does not crash or throw
-    ASSERT_NO_THROW(FastLog::initialize("another_log.log", true))
-        << "Subsequent calls to FastLog::initialize should be safely ignored";
-}
+    ASSERT_NO_THROW({
+        FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    }) << "FastLog constructor should succeed without throwing";
 
+    ASSERT_NO_THROW({
+        FastLog anotherLogger("another_log.log", true);
+    }) << "Creating another FastLog instance should succeed";
+}
 
 TEST(FastLogTest, test_fatal)
 {
-    ASSERT_DEATH(LOG_FATAL("Fatal exception, test will terminate."), "");
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    ASSERT_DEATH(logger.fatal("Fatal exception, test will terminate."), "");
 }
 
-// Validate all standard severity logging macros and direct logMsg API
+// Validate all standard severity logging methods and direct logMsg API
 TEST(FastLogTest, test_all_severity_macros)
 {
-    ASSERT_NO_THROW(LOG_DEBUG("Testing LOG_DEBUG macro execution"))
-        << "LOG_DEBUG macro should not throw";
-    ASSERT_NO_THROW(LOG_INFO("Testing LOG_INFO macro execution"))
-        << "LOG_INFO macro should not throw";
-    ASSERT_NO_THROW(LOG_WARNING("Testing LOG_WARNING macro execution"))
-        << "LOG_WARNING macro should not throw";
-    ASSERT_NO_THROW(LOG_CRITICAL("Testing LOG_CRITICAL macro execution"))
-        << "LOG_CRITICAL macro should not throw";
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    ASSERT_NO_THROW(logger.debug("Testing debug method execution"))
+        << "debug method should not throw";
+    ASSERT_NO_THROW(logger.info("Testing info method execution"))
+        << "info method should not throw";
+    ASSERT_NO_THROW(logger.warning("Testing warning method execution"))
+        << "warning method should not throw";
+    ASSERT_NO_THROW(logger.critical("Testing critical method execution"))
+        << "critical method should not throw";
+
+    // Also validate named log<Level> aliases
+    ASSERT_NO_THROW(logger.logDebug("Testing logDebug alias execution"));
+    ASSERT_NO_THROW(logger.logInfo("Testing logInfo alias execution"));
+    ASSERT_NO_THROW(logger.logWarning("Testing logWarning alias execution"));
+    ASSERT_NO_THROW(logger.logCritical("Testing logCritical alias execution"));
 
     // Direct invocation via FastLog::logMsg
-    ASSERT_NO_THROW(FastLog::getInstance().logMsg(Severity::INFO,
-                                                  "Direct API invocation message",
-                                                  "custom.cpp",
-                                                  100))
+    ASSERT_NO_THROW(logger.logMsg(Severity::INFO,
+                                  "Direct API invocation message",
+                                  "custom.cpp",
+                                  100))
         << "Direct logMsg method call should not throw";
 
-    FastLog::getInstance().flush();
+    logger.flush();
 }
 
 // Validate buffering behavior of logger write-to-disk.
 TEST(FastLogTest, test_buffer)
 {
-    const int stableCount = getStableCount();
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    const int stableCount = getStableCount(logger);
 
     // This should not be enough data to flush the log buffer.
-    LOG_INFO("don't flush me");
+    logger.info("don't flush me");
 
-    const bool success = wait_for_written_log_count(stableCount + 1, 0.1);
+    const bool success = wait_for_written_log_count(logger, stableCount + 1, 0.1);
     ASSERT_TRUE(!success) << "timed out waiting to flush a single log message.";
 }
 
 // Validate flush functionality.
 TEST(FastLogTest, test_flush)
 {
-    const int stableCount = getStableCount();
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    const int stableCount = getStableCount(logger);
 
     // This should not be enough data to flush the log buffer.
-    LOG_INFO("Flush me");
+    logger.info("Flush me");
 
     // force flush
-    FastLog::getInstance().flush();
+    logger.flush();
 
-    const bool success = wait_for_written_log_count(stableCount + 1);
+    const bool success = wait_for_written_log_count(logger, stableCount + 1);
     ASSERT_TRUE(success) << "timed out waiting to flush a single log message.";
 }
 
 // Validate handling of special characters, JSON formatting characters, and large payloads
 TEST(FastLogTest, test_special_characters_and_payloads)
 {
-    ASSERT_NO_THROW(LOG_INFO("JSON quotes: \"val\", backslashes: \\, slashes: /"))
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    ASSERT_NO_THROW(logger.info("JSON quotes: \"val\", backslashes: \\, slashes: /"))
         << "Quotes and backslashes should log cleanly";
-    ASSERT_NO_THROW(LOG_INFO("Formatting characters: \n\t\r\b\f"))
+    ASSERT_NO_THROW(logger.info("Formatting characters: \n\t\r\b\f"))
         << "Formatting characters should log cleanly";
     ASSERT_NO_THROW(
-        LOG_INFO("Embedded JSON: {\"nested\": {\"key\": \"value\", \"array\": [1, 2, 3]}}"))
+        logger.info("Embedded JSON: {\"nested\": {\"key\": \"value\", \"array\": [1, 2, 3]}}"))
         << "Embedded JSON string should log cleanly";
-    ASSERT_NO_THROW(LOG_INFO("UTF-8 unicode: \u2705 \U0001F680 \u4F60\u597D\u4E16\u754C"))
+    ASSERT_NO_THROW(logger.info("UTF-8 unicode: \u2705 \U0001F680 \u4F60\u597D\u4E16\u754C"))
         << "UTF-8 Unicode string should log cleanly";
 
     // Large payload (8 KB)
     std::string largeMessage(8192, 'A');
-    ASSERT_NO_THROW(LOG_INFO(largeMessage)) << "Large 8KB payload message should log cleanly";
+    ASSERT_NO_THROW(logger.info(largeMessage)) << "Large 8KB payload message should log cleanly";
 
     // Empty message string
-    ASSERT_NO_THROW(LOG_INFO("")) << "Empty log message should log cleanly";
+    ASSERT_NO_THROW(logger.info("")) << "Empty log message should log cleanly";
 
-    FastLog::getInstance().flush();
+    logger.flush();
 }
 
 // Validate concurrent multi-threaded logging safety across multiple worker threads
 TEST(FastLogTest, test_concurrent_multithreaded_logging)
 {
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
     const unsigned int numThreads = std::max(4u, std::thread::hardware_concurrency());
     const int logsPerThread = 1000;
     std::vector<std::thread> threads;
@@ -155,16 +168,16 @@ TEST(FastLogTest, test_concurrent_multithreaded_logging)
 
     threads.reserve(numThreads);
     for (unsigned int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([t, logsPerThread, &startFlag, &completedThreads]() {
+        threads.emplace_back([t, logsPerThread, &startFlag, &completedThreads, &logger]() {
             while (!startFlag.load()) {
                 std::this_thread::yield();
             }
             for (int i = 0; i < logsPerThread; ++i) {
                 switch (i % 5) {
-                    case 0: LOG_DEBUG("Thread " + std::to_string(t) + " debug " + std::to_string(i)); break;
-                    case 1: LOG_INFO("Thread " + std::to_string(t) + " info " + std::to_string(i)); break;
-                    case 2: LOG_WARNING("Thread " + std::to_string(t) + " warn " + std::to_string(i)); break;
-                    case 3: LOG_CRITICAL("Thread " + std::to_string(t) + " crit " + std::to_string(i)); break;
+                    case 0: logger.debug("Thread " + std::to_string(t) + " debug " + std::to_string(i)); break;
+                    case 1: logger.info("Thread " + std::to_string(t) + " info " + std::to_string(i)); break;
+                    case 2: logger.warning("Thread " + std::to_string(t) + " warn " + std::to_string(i)); break;
+                    case 3: logger.critical("Thread " + std::to_string(t) + " crit " + std::to_string(i)); break;
                 }
             }
             completedThreads.fetch_add(1);
@@ -181,12 +194,13 @@ TEST(FastLogTest, test_concurrent_multithreaded_logging)
     ASSERT_TRUE(completedThreads.load() == static_cast<int>(numThreads))
         << "All worker threads must finish logging successfully without hanging or deadlocking";
 
-    FastLog::getInstance().flush();
+    logger.flush();
 }
 
 // Validate queue stability under high volume bursts
 TEST(FastLogTest, test_high_volume_burst_logging)
 {
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
     const int totalMessages = 25000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
     const int messagesPerThread = totalMessages / numThreads;
@@ -194,9 +208,9 @@ TEST(FastLogTest, test_high_volume_burst_logging)
 
     threads.reserve(numThreads);
     for (unsigned int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([t, messagesPerThread]() {
+        threads.emplace_back([t, messagesPerThread, &logger]() {
             for (int i = 0; i < messagesPerThread; ++i) {
-                LOG_INFO("Burst logging thread " + std::to_string(t) + " item " + std::to_string(i));
+                logger.info("Burst logging thread " + std::to_string(t) + " item " + std::to_string(i));
             }
         });
     }
@@ -209,15 +223,16 @@ TEST(FastLogTest, test_high_volume_burst_logging)
 
     int remainder = totalMessages % numThreads;
     for (int i = 0; i < remainder; ++i) {
-        LOG_INFO("Burst logging remainder item " + std::to_string(i));
+        logger.info("Burst logging remainder item " + std::to_string(i));
     }
 
-    FastLog::getInstance().flush();
+    logger.flush();
 }
 
 // Performance test validating logging throughput and enqueue latency
 TEST(FastLogTest, test_performance_throughput)
 {
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
     const int benchmarkLogs = 20000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
     const int logsPerThread = benchmarkLogs / numThreads;
@@ -226,12 +241,12 @@ TEST(FastLogTest, test_performance_throughput)
 
     threads.reserve(numThreads);
     for (unsigned int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([t, logsPerThread, &startFlag]() {
+        threads.emplace_back([t, logsPerThread, &startFlag, &logger]() {
             while (!startFlag.load()) {
                 std::this_thread::yield();
             }
             for (int i = 0; i < logsPerThread; ++i) {
-                LOG_INFO("Perf benchmark thread " + std::to_string(t) + " message #" + std::to_string(i));
+                logger.info("Perf benchmark thread " + std::to_string(t) + " message #" + std::to_string(i));
             }
         });
     }
@@ -264,14 +279,14 @@ TEST(FastLogTest, test_performance_throughput)
     ASSERT_TRUE(throughput >= 1000.0)
         << "Throughput threshold failed: throughput was below 1,000 msgs/sec";
 
-    FastLog::getInstance().flush();
+    logger.flush();
 }
 
 // Performance test validating disk/file write throughput and drain latency using getLogCount()
 TEST(FastLogTest, test_file_write_throughput)
 {
-
-    const int startLogCount = getStableCount();
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION, ENABLE_STDOUT);
+    const int startLogCount = getStableCount(logger);
 
     const int testLogs = 5000;
     const unsigned int numThreads = std::max(2u, std::thread::hardware_concurrency());
@@ -283,12 +298,12 @@ TEST(FastLogTest, test_file_write_throughput)
 
     threads.reserve(numThreads);
     for (unsigned int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([t, logsPerThread, &startFlag]() {
+        threads.emplace_back([t, logsPerThread, &startFlag, &logger]() {
             while (!startFlag.load()) {
                 std::this_thread::yield();
             }
             for (int i = 0; i < logsPerThread; ++i) {
-                LOG_INFO("File write perf thread " + std::to_string(t) + " msg #" + std::to_string(i));
+                logger.info("File write perf thread " + std::to_string(t) + " msg #" + std::to_string(i));
             }
         });
     }
@@ -303,16 +318,16 @@ TEST(FastLogTest, test_file_write_throughput)
     }
 
     // flush the logger.
-    FastLog::getInstance().flush();
+    logger.flush();
 
     // Wait until background writer thread has formatted and written all messages to the file
-    bool completed = wait_for_written_log_count(expectedFinalCount, 15.0);
+    bool completed = wait_for_written_log_count(logger, expectedFinalCount, 15.0);
     auto end = std::chrono::high_resolution_clock::now();
 
     ASSERT_TRUE(completed)
         << "Timed out waiting for FastLog background writer to flush all logs to disk";
 
-    int finalLogCount = FastLog::getInstance().getLogCount();
+    int finalLogCount = logger.getLogCount();
     int actualLogsWritten = finalLogCount - startLogCount;
     ASSERT_TRUE(actualLogsWritten == testLogs)
         << "Log count mismatch: expected " + std::to_string(testLogs) + " logs written, but got "
@@ -340,9 +355,6 @@ std::optional<unsigned int> maxLogNumber(const std::string &baseName)
     // Get the curr dir
     std::filesystem::path dir = std::filesystem::current_path();
 
-    // std::regex pattern(
-    //     R"(" + baseName + R"-(\d+)\.log"")
-    // );
     std::string pattern = baseName + R"(-(\d+)\.log)";
     std::regex re(pattern);
 
@@ -368,17 +380,24 @@ std::optional<unsigned int> maxLogNumber(const std::string &baseName)
 // Ensure a new log file is created once the set max size is reached.
 TEST(FastLogTest, test_file_rotation)
 {
+    const unsigned int maxFileSize = (1 << 22); // 4 MB threshold to trigger rotation
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION,
+                   ENABLE_STDOUT,
+                   DEFAULT_BUFFER_SIZE,
+                   DEFAULT_LOG_QUEUE_SIZE,
+                   maxFileSize);
+
     std::optional<unsigned int> maxLogNumBefore = maxLogNumber(LOG_FILE_BASE_NAME);
 
     ASSERT_TRUE(maxLogNumBefore != std::nullopt);
 
     // this msg size should be enough to force a file rotation.
-    unsigned int msgSize = (1 << 23);
-    LOG_INFO(std::string(msgSize, 'a'));
+    unsigned int msgSize = (1 << 23); // 8 MB message exceeds 4 MB maxFileSize
+    logger.info(std::string(msgSize, 'a'));
 
     // The next log msg should go into a new file.
-    LOG_INFO("new file");
-    FastLog::getInstance().flush();
+    logger.info("new file");
+    logger.flush();
 
     // sleep for some time to allow background thread to process.
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
