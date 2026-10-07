@@ -13,7 +13,7 @@ include(FetchContent)
 FetchContent_Declare(
     LockFreeRingBuffer
     GIT_REPOSITORY  https://github.com/Abhiroopks/LockFreeRingBuffer.git
-    GIT_TAG         v1.1.1
+    GIT_TAG         main
     EXCLUDE_FROM_ALL
 )
 
