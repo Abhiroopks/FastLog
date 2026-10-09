@@ -32,7 +32,6 @@ struct LogMsg
     Severity level;
     std::string msg;
     std::string source;
-    // std::chrono::local_time<std::chrono::system_clock::duration> timestamp;
     time_t timestamp;
     unsigned int line;
 
@@ -40,7 +39,6 @@ struct LogMsg
     LogMsg(const Severity level,
            std::string &&_msg,
            std::string &&_source,
-           // std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
            time_t timestamp,
            const uint8_t line);
 };
