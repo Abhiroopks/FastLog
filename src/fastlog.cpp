@@ -7,8 +7,9 @@
 LogMsg::LogMsg(const Severity level,
                std::string &&_msg,
                std::string &&_source,
-               std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
-               const unsigned int line)
+               // std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
+               time_t timestamp,
+               const uint8_t line)
     : level(level)
     , msg(std::move(_msg))
     , source(std::move(_source))
@@ -91,16 +92,16 @@ void FastLog::logMsg(const Severity level,
         return;
     }
 
-    auto timePoint = timeZone->to_local(std::chrono::system_clock::now());
+    // auto timePoint = timeZone->to_local(std::chrono::system_clock::now());
+    time_t timePoint = std::time(nullptr);
 
     if (!blocking) {
-        messages.push(LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
+        messages.push(LogMsg(level, std::move(msg), std::move(source), timePoint, line));
     } else {
         bool succ = false;
         std::chrono::nanoseconds blockingTime = DEFAULT_BLOCKING_TIME;
         while (!succ) {
-            succ = messages.push(
-                LogMsg(level, std::move(msg), std::move(source), std::move(timePoint), line));
+            succ = messages.push(LogMsg(level, std::move(msg), std::move(source), timePoint, line));
 
             std::this_thread::sleep_for(blockingTime);
             blockingTime *= 2;
@@ -177,7 +178,7 @@ void FastLog::writeLoop()
         }
 
         // Check if this a special flush request
-        if (logMsg.line == -1) {
+        if (logMsg.line == 0) {
             flushBuffer();
 
             // no need to process this msg, as it's just
@@ -194,11 +195,10 @@ void FastLog::writeLoop()
             std::cout << logMsg.msg << std::endl;
         }
 
-        writeBuffer.append("{\"timestamp\":\""
-                           + std::format("{:%d-%m-%Y %H:%M:%S}", logMsg.timestamp)
-                           + "\",\"level\":\"" + sev_map[static_cast<size_t>(logMsg.level)]
-                           + "\",\"source\":\"" + logMsg.source + "\",\"line\":"
-                           + std::to_string(logMsg.line) + ",\"msg\":\"" + logMsg.msg + "\"}\n");
+        writeBuffer.append("{\"timestamp\":" + std::to_string(logMsg.timestamp) + ",\"level\":\""
+                           + sev_map[static_cast<size_t>(logMsg.level)] + "\",\"source\":\""
+                           + logMsg.source + "\",\"line\":" + std::to_string(logMsg.line)
+                           + ",\"msg\":\"" + logMsg.msg + "\"}\n");
 
 #ifdef TESTING
         bufferMsgCount++;
@@ -235,8 +235,8 @@ void FastLog::flushBuffer()
 
 void FastLog::flush()
 {
-    // use a special (line # is -1) LogMsg to force a flush to disk.
-    logMsg(Severity::DEBUG, "", "", -1);
+    // use a special (line # is 0) LogMsg to force a flush to disk.
+    logMsg(Severity::DEBUG, "", "", 0);
 }
 
 #ifdef TESTING

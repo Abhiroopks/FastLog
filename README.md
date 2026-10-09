@@ -239,13 +239,13 @@ FastLog enqueues log messages into an internal lock-free ring buffer (`LockFreeR
 
 ---
 
-## JSON Log Output Format
+## JSONL Log Output Format
 
-FastLog writes structured JSON entries to the configured log file:
+FastLog writes structured JSONL entries to the configured log file:
 
 ```json
-{"timestamp":"23-09-2026 16:22:28","level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing debug method execution"}
-{"timestamp":"23-09-2026 16:22:28","level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing info method execution"}
+{"timestamp":1791562629,"level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing debug method execution"}
+{"timestamp":1791562629,"level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing info method execution"}
 ```
 
 ---
@@ -284,6 +284,6 @@ Benchmarked on the hardware described above.
 
 | Test | Throughput |
 |------|-----------|
-| Enqueue throughput | ~2 million msgs/sec |
-| File write throughput | ~1.2 million logs/sec |
+| Enqueue throughput | ~8 million logs/sec |
+| File write throughput | ~2.5 million logs/sec |
 

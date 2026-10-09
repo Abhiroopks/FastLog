@@ -32,15 +32,17 @@ struct LogMsg
     Severity level;
     std::string msg;
     std::string source;
-    std::chrono::local_time<std::chrono::system_clock::duration> timestamp;
+    // std::chrono::local_time<std::chrono::system_clock::duration> timestamp;
+    time_t timestamp;
     unsigned int line;
 
     LogMsg() = default;
     LogMsg(const Severity level,
            std::string &&_msg,
            std::string &&_source,
-           std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
-           const unsigned int line);
+           // std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
+           time_t timestamp,
+           const uint8_t line);
 };
 
 class FASTLOG_EXPORT FastLog
