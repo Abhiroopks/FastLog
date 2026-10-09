@@ -10,7 +10,7 @@ A high-performance, asynchronous, thread-safe C++ logging library that outputs s
 - **Thread-Safe**: Multiple threads can safely log concurrently without data races or lock contention on I/O.
 - **Structured JSONL Output**: Logs are formatted into clean JSONL records for easy parsing and log analysis.
 - **Automatic Log Rotation**: Automatically rolls over to a new log file once a configurable file size threshold (default 16 MB) is reached, using sequential numbering (`<name>-0.log`, `<name>-1.log`, etc.).
-- **Automatic Source Location Capture**: Automatically captures source file name, line number, log level, and timestamp using C++20 `std::source_location`.
+- **Automatic Source Location Capture**: Automatically captures source function name, line number, log level, and timestamp using C++20 `std::source_location`.
 - **Dual Output Support**: Logs to a specified file and optionally mirrors output to standard output (`stdout`).
 
 ---
@@ -209,7 +209,7 @@ FastLog enqueues log messages into an internal lock-free ring buffer (`LockFreeR
 
 ### Logging Methods
 
-`FastLog` instances provide public member methods for each severity level. These methods automatically capture the calling source file name and line number using C++20 `std::source_location`:
+`FastLog` instances provide public member methods for each severity level. These methods automatically capture the calling source function name and line number using C++20 `std::source_location`:
 
 | Method | Level | Description |
 | :--- | :--- | :--- |
@@ -222,7 +222,7 @@ FastLog enqueues log messages into an internal lock-free ring buffer (`LockFreeR
 #### Overloads & Aliases
 
 - **Explicit Source & Line Overloads**:
-  All severity methods provide overloads accepting explicit source file and line number:
+  All severity methods provide overloads accepting explicit source function and line number:
   - `void debug(std::string msg, std::string source, const unsigned int line)`
   - `void info(std::string msg, std::string source, const unsigned int line)`
   - `void warning(std::string msg, std::string source, const unsigned int line)`
@@ -244,15 +244,19 @@ FastLog enqueues log messages into an internal lock-free ring buffer (`LockFreeR
 FastLog writes structured JSONL entries to the configured log file:
 
 ```json
-{"timestamp":1791562629,"level":"DEBUG","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":143,"msg":"Testing debug method execution"}
-{"timestamp":1791562629,"level":"INFO","source":"/home/abhi/Projects/FastLog/test/main.cpp","line":144,"msg":"Testing info method execution"}
+{"timestamp":1791563058,"level":"INFO","source":"virtual void FastLogTest_test_blocking_Test::TestBody()","line":171,"msg":"test blocking"}
+{"timestamp":1791563058,"level":"INFO","source":"virtual void FastLogTest_test_blocking_Test::TestBody()","line":171,"msg":"test blocking"}
+{"timestamp":1791563058,"level":"INFO","source":"virtual void FastLogTest_test_blocking_Test::TestBody()","line":171,"msg":"test blocking"}
+{"timestamp":1791563058,"level":"INFO","source":"virtual void FastLogTest_test_blocking_Test::TestBody()","line":171,"msg":"test blocking"}
 ```
 
 ---
 
 ## Building and Running Tests
 
-To build the library and run the included multi-threaded test suite, use the provided convenience bash script: `run_tests.sh`
+* To build the library and run the included multi-threaded test suite, use the provided convenience bash script: `run_tests.sh`
+* To run the tests with perf, use the script: `run_perf.sh`
+    * Then use `perf report` to view details.`
 
 ## Performance
 

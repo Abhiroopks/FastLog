@@ -7,7 +7,6 @@
 LogMsg::LogMsg(const Severity level,
                std::string &&_msg,
                std::string &&_source,
-               // std::chrono::local_time<std::chrono::system_clock::duration> &&timestamp,
                time_t timestamp,
                const uint8_t line)
     : level(level)
@@ -92,7 +91,6 @@ void FastLog::logMsg(const Severity level,
         return;
     }
 
-    // auto timePoint = timeZone->to_local(std::chrono::system_clock::now());
     time_t timePoint = std::time(nullptr);
 
     if (!blocking) {
@@ -111,27 +109,27 @@ void FastLog::logMsg(const Severity level,
 
 void FastLog::info(std::string msg, const std::source_location loc)
 {
-    logMsg(Severity::INFO, std::move(msg), std::string(loc.file_name()), loc.line());
+    logMsg(Severity::INFO, std::move(msg), std::string(loc.function_name()), loc.line());
 }
 
 void FastLog::debug(std::string msg, const std::source_location loc)
 {
-    logMsg(Severity::DEBUG, std::move(msg), std::string(loc.file_name()), loc.line());
+    logMsg(Severity::DEBUG, std::move(msg), std::string(loc.function_name()), loc.line());
 }
 
 void FastLog::warning(std::string msg, const std::source_location loc)
 {
-    logMsg(Severity::WARNING, std::move(msg), std::string(loc.file_name()), loc.line());
+    logMsg(Severity::WARNING, std::move(msg), std::string(loc.function_name()), loc.line());
 }
 
 void FastLog::critical(std::string msg, const std::source_location loc)
 {
-    logMsg(Severity::CRITICAL, std::move(msg), std::string(loc.file_name()), loc.line());
+    logMsg(Severity::CRITICAL, std::move(msg), std::string(loc.function_name()), loc.line());
 }
 
 [[noreturn]] void FastLog::fatal(std::string msg, const std::source_location loc)
 {
-    logMsg(Severity::FATAL, std::move(msg), std::string(loc.file_name()), loc.line());
+    logMsg(Severity::FATAL, std::move(msg), std::string(loc.function_name()), loc.line());
     std::exit(-1);
 }
 
