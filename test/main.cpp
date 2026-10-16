@@ -408,12 +408,12 @@ TEST(FastLogTest, test_file_rotation)
 }
 
 // Ensure blocking behavior takes a minimum amount of time to complete
-// in the case of a full queue.
-TEST(FastLogTest, test_blocking)
+// in the case of a full queue - only 1 producer thread.
+TEST(FastLogTest, test_blocking_single_thread)
 {
-    // set queue size to 1, which is VERY SMALL.
-    unsigned int logQueueSize = 1;
-    unsigned int numMessages = 10;
+    // set queue size to 10, which is VERY SMALL.
+    unsigned int logQueueSize = 10;
+    unsigned int numMessages = 100;
 
     FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION,
                    ENABLE_STDOUT,
@@ -424,11 +424,76 @@ TEST(FastLogTest, test_blocking)
 
     auto start = std::chrono::high_resolution_clock::now();
     for (auto i = 0; i < numMessages; i++) {
-        logger.info("test blocking");
+        logger.info("test blocking single thread");
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    double elapsedSeconds = std::chrono::duration<double>(end - start).count();
+    double writeThroughput = static_cast<double>(numMessages)
+                             / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
+    double avgLatencyMicros = elapsedSeconds * 1e6 / static_cast<double>(numMessages);
+
+    std::cout << "\n   -> Enqueued " << numMessages << " msgs in " << std::fixed
+              << std::setprecision(4) << elapsedSeconds * 1e6 << " us " << "(" << std::fixed
+              << std::setprecision(0) << writeThroughput << " logs/sec, " << std::fixed
+              << std::setprecision(2) << avgLatencyMicros << " us/log avg write latency) ...\n\n";
+
+    ASSERT_TRUE((end - start) >= DEFAULT_BLOCKING_TIME);
+}
+
+// Ensure blocking behavior takes a minimum amount of time to complete
+// in the case of a full queue - multiple producer threads.
+TEST(FastLogTest, test_blocking_multi_thread)
+{
+    // set queue size to 10, which is VERY SMALL.
+    unsigned int logQueueSize = 10;
+    const unsigned int numThreads = std::max(4u, std::thread::hardware_concurrency());
+    const unsigned int messagesPerThread = 25;
+    const unsigned int totalMessages = numThreads * messagesPerThread;
+
+    FastLog logger(LOG_FILE_BASE_NAME + LOG_FILE_EXTENSION,
+                   ENABLE_STDOUT,
+                   DEFAULT_BUFFER_SIZE,
+                   logQueueSize,
+                   DEFAULT_LOG_FILE_SIZE,
+                   true);
+
+    std::vector<std::thread> threads;
+    std::atomic<bool> startFlag{false};
+    threads.reserve(numThreads);
+
+    for (unsigned int t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&startFlag, &logger, messagesPerThread]() {
+            while (!startFlag.load()) {
+                std::this_thread::yield();
+            }
+            for (unsigned int i = 0; i < messagesPerThread; ++i) {
+                logger.info("test blocking multi thread");
+            }
+        });
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+    startFlag.store(true);
+
+    for (auto &t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
     }
     auto end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "\n   -> Enqueuing " << numMessages << " msgs with queue size == " << logQueueSize << " took "
-              << std::chrono::duration_cast<std::chrono::microseconds>(end - start) << "\n\n";
+    double elapsedSeconds = std::chrono::duration<double>(end - start).count();
+    double writeThroughput = static_cast<double>(totalMessages)
+                             / (elapsedSeconds > 0 ? elapsedSeconds : 0.0001);
+    double avgLatencyMicros = elapsedSeconds * 1e6 / static_cast<double>(totalMessages);
+
+    std::cout << "\n   -> Enqueued " << totalMessages << " msgs across " << numThreads
+              << " threads in " << std::fixed << std::setprecision(4)
+              << elapsedSeconds * 1e6 << " us (" << elapsedSeconds << " s) " << "("
+              << std::fixed << std::setprecision(0) << writeThroughput << " logs/sec, "
+              << std::fixed << std::setprecision(2) << avgLatencyMicros
+              << " us/log avg write latency) ...\n\n";
+
     ASSERT_TRUE((end - start) >= DEFAULT_BLOCKING_TIME);
 }
+
