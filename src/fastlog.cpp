@@ -2,6 +2,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <random>
 
 // Constructor for LogMsg struct.
 LogMsg::LogMsg(const Severity level,
@@ -10,12 +11,18 @@ LogMsg::LogMsg(const Severity level,
                time_t timestamp,
                const uint8_t line)
     : level(level)
-    , msg(std::move(_msg))
-    , source(std::move(_source))
+    , msg(_msg)
+    , source(_source)
     , timestamp(timestamp)
     , line(line)
 {}
 
+std::chrono::nanoseconds generateJitter()
+{
+    static std::mt19937 gen{std::random_device{}()};
+    static std::uniform_int_distribution<int> dist(0, 100);
+    return std::chrono::nanoseconds(dist(gen));
+}
 /**
  * @brief FastLog::FastLog Public constructor
  */
@@ -92,17 +99,13 @@ void FastLog::logMsg(const Severity level,
     }
 
     time_t timePoint = std::time(nullptr);
+    bool succ = messages.push(LogMsg(level, std::move(msg), std::move(source), timePoint, line));
 
-    if (!blocking) {
-        messages.push(LogMsg(level, std::move(msg), std::move(source), timePoint, line));
-    } else {
-        bool succ = false;
-        std::chrono::nanoseconds blockingTime = DEFAULT_BLOCKING_TIME;
+    if (!succ && blocking) {
+        std::chrono::nanoseconds blockingTime = DEFAULT_BLOCKING_TIME + generateJitter();
         while (!succ) {
-            succ = messages.push(LogMsg(level, std::move(msg), std::move(source), timePoint, line));
-
             std::this_thread::sleep_for(blockingTime);
-            blockingTime *= 2;
+            succ = messages.push(LogMsg(level, std::move(msg), std::move(source), timePoint, line));
         }
     }
 }
